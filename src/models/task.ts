@@ -282,6 +282,21 @@ export function getUnassignedPendingTasksByGroup(): Record<string, { groupChatId
   return grouped;
 }
 
+export function deleteTask(taskId: number): boolean {
+  const db = getDb();
+  const result = db.prepare('DELETE FROM tasks WHERE id = ?').run(taskId);
+  return result.changes > 0;
+}
+
+export function getDistinctGroupChats(): { group_chat_id: string; group_chat_name: string }[] {
+  const db = getDb();
+  return db.prepare(
+    `SELECT DISTINCT group_chat_id, group_chat_name FROM tasks
+     WHERE group_chat_id IS NOT NULL AND group_chat_name IS NOT NULL
+     ORDER BY group_chat_name`
+  ).all() as { group_chat_id: string; group_chat_name: string }[];
+}
+
 export function getTaskStats(): {
   total: number;
   completed: number;
