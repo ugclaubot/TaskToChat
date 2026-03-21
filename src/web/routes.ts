@@ -8,8 +8,18 @@ import {
   completeTask,
   deleteTask,
   getDistinctGroupChats,
+  getPendingTasksForEmployee,
+  getUnassignedPendingTasksByGroup,
 } from '../models/task';
-import { getAllEmployees } from '../models/employee';
+import { getAllEmployees, getEmployeeById } from '../models/employee';
+import { Telegraf } from 'telegraf';
+import { formatDueDate } from '../bot/taskParser';
+
+let botInstance: Telegraf | null = null;
+
+export function setBotInstance(bot: Telegraf): void {
+  botInstance = bot;
+}
 
 const router = Router();
 
@@ -43,6 +53,8 @@ router.get('/', (req: Request, res: Response) => {
     tasksByEmployee[key].push(task);
   }
 
+  const msg = (req.query.msg as string) || '';
+
   res.render('dashboard', {
     tasks,
     tasksByEmployee,
@@ -50,6 +62,7 @@ router.get('/', (req: Request, res: Response) => {
     employees,
     groupChats,
     filters,
+    msg,
   });
 });
 
@@ -92,6 +105,64 @@ router.post('/tasks/:id/delete', (req: Request, res: Response) => {
   const id = parseInt(req.params.id, 10);
   if (!isNaN(id)) deleteTask(id);
   res.redirect('/');
+});
+
+// Send pending task list to a person (DM) or group (group chat) via Telegram
+router.post('/tasks/send-telegram', async (req: Request, res: Response) => {
+  if (!botInstance) {
+    return res.redirect('/?msg=Bot+not+ready');
+  }
+
+  const { type, employee_id, group_chat_id } = req.body;
+
+  try {
+    if (type === 'employee' && employee_id) {
+      const empId = parseInt(employee_id, 10);
+      const employee = getEmployeeById(empId);
+      if (!employee || !employee.telegram_user_id) {
+        return res.redirect('/?msg=Employee+has+no+Telegram+ID');
+      }
+      const tasks = getPendingTasksForEmployee(empId);
+      if (tasks.length === 0) {
+        return res.redirect('/?msg=No+pending+tasks');
+      }
+      const lines = [`📋 *Your pending tasks (${tasks.length}):*\n`];
+      tasks.forEach((t, i) => {
+        const due = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
+        const overdue = t.status === 'overdue' ? ' ⚠️' : '';
+        lines.push(`${i + 1}. ${t.title}${due}${overdue}`);
+      });
+      await botInstance.telegram.sendMessage(employee.telegram_user_id, lines.join('\n'), { parse_mode: 'Markdown' });
+      return res.redirect('/?msg=Sent+to+' + encodeURIComponent(employee.name));
+
+    } else if (type === 'group' && group_chat_id) {
+      const groups = getUnassignedPendingTasksByGroup();
+      const group = groups[group_chat_id];
+      // Also get all tasks for this group chat (assigned + unassigned)
+      const allTasks = getAllTasksWithEmployees().filter(
+        t => t.group_chat_id === group_chat_id && t.status !== 'completed'
+      );
+      if (allTasks.length === 0) {
+        return res.redirect('/?msg=No+pending+tasks');
+      }
+      const groupName = allTasks[0]?.group_chat_name || 'Group';
+      const lines = [`📋 *Pending tasks (${allTasks.length}):*\n`];
+      allTasks.forEach((t, i) => {
+        const due = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
+        const overdue = t.status === 'overdue' ? ' ⚠️' : '';
+        const assignee = t.employee_name ? ` → ${t.employee_name}` : '';
+        lines.push(`${i + 1}. ${t.title}${assignee}${due}${overdue}`);
+      });
+      await botInstance.telegram.sendMessage(group_chat_id, lines.join('\n'), { parse_mode: 'Markdown' });
+      return res.redirect('/?msg=Sent+to+' + encodeURIComponent(groupName));
+    }
+
+    res.redirect('/?msg=Invalid+request');
+  } catch (err: unknown) {
+    console.error('[Web] Send Telegram error:', err);
+    const errMsg = err instanceof Error ? err.message : 'Unknown error';
+    res.redirect('/?msg=Error:+' + encodeURIComponent(errMsg));
+  }
 });
 
 export default router;

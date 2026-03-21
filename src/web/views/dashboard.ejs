@@ -5,74 +5,116 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TaskToChat</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] } } } }</script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          colors: {
+            surface: '#ffffff',
+            page: '#f5f5f4',
+            accent: '#18181b',
+            muted: '#a1a1aa',
+            subtle: '#e4e4e7',
+          }
+        }
+      }
+    }
+  </script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     * { font-family: 'Inter', system-ui, sans-serif; }
-    .task-row:hover { background: #f8fafc; }
-    .task-row:hover .task-actions { opacity: 1; }
-    .task-actions { opacity: 0; transition: opacity 0.15s; }
-    @media (max-width: 640px) { .task-actions { opacity: 1; } }
-    .priority-dot-high { background: #ef4444; }
-    .priority-dot-medium { background: #f59e0b; }
-    .priority-dot-low { background: #22c55e; }
-    .section-add { display: none; }
-    .section-add.active { display: flex; }
-    .filter-bar { display: none; }
-    .filter-bar.active { display: flex; }
+    .task-row { transition: background 0.1s; }
+    .task-row:hover { background: #fafaf9; }
+    .task-row:hover .hover-show { opacity: 1; }
+    .hover-show { opacity: 0; transition: opacity 0.12s; }
+    @media (max-width: 640px) { .hover-show { opacity: 1; } }
+    .pri-high { border-left: 3px solid #ef4444; }
+    .pri-medium { border-left: 3px solid #f59e0b; }
+    .pri-low { border-left: 3px solid #22c55e; }
+    .dot-high { background: #ef4444; }
+    .dot-medium { background: #f59e0b; }
+    .dot-low { background: #22c55e; }
+    .add-row { display: none; }
+    .add-row.open { display: flex; }
+    .filter-panel { max-height: 0; overflow: hidden; transition: max-height 0.2s ease; }
+    .filter-panel.open { max-height: 200px; }
+    .toast { animation: slideIn 0.3s ease, fadeOut 0.3s ease 3s forwards; }
+    @keyframes slideIn { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes fadeOut { to { opacity: 0; pointer-events: none; } }
+    .check-btn { transition: all 0.15s; }
+    .check-btn:hover { border-color: #22c55e; background: #f0fdf4; color: #22c55e; }
+    .send-btn { transition: all 0.15s; }
+    .send-btn:hover { background: #2563eb; color: white; }
   </style>
 </head>
-<body class="bg-[#fafafa] min-h-screen">
+<body class="bg-page min-h-screen">
 
-  <div class="max-w-3xl mx-auto px-4 pt-6 pb-2">
-    <div class="flex items-center justify-between mb-1">
-      <h1 class="text-lg font-bold text-gray-900 tracking-tight">📋 TaskToChat</h1>
-      <button onclick="document.querySelector('.filter-bar').classList.toggle('active')"
-        class="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded transition">⚙ Filter</button>
+  <!-- Toast notification -->
+  <% if (msg) { %>
+  <div class="toast fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-accent text-white text-sm px-4 py-2 rounded-lg shadow-lg">
+    <%= msg %>
+  </div>
+  <% } %>
+
+  <!-- Header -->
+  <div class="max-w-2xl mx-auto px-4 pt-8 pb-3">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-bold text-accent tracking-tight">TaskToChat</h1>
+        <div class="flex items-center gap-3 mt-1 text-xs text-muted">
+          <span><%= stats.pending + stats.in_progress + stats.overdue %> open</span>
+          <span class="text-subtle">·</span>
+          <% if (stats.overdue > 0) { %><span class="text-red-500"><%= stats.overdue %> overdue</span><span class="text-subtle">·</span><% } %>
+          <span><%= stats.completed %> done</span>
+          <span class="text-subtle">·</span>
+          <span class="text-emerald-600"><%= stats.completion_rate %>%</span>
+        </div>
+      </div>
+      <button onclick="document.getElementById('filters').classList.toggle('open')"
+        class="text-xs text-muted hover:text-accent border border-subtle rounded-lg px-3 py-1.5 transition hover:border-zinc-400">
+        Filters
+      </button>
     </div>
 
-    <!-- Quick stats -->
-    <div class="flex items-center gap-4 text-xs text-gray-400 mb-4">
-      <span><strong class="text-gray-700"><%= stats.pending + stats.in_progress + stats.overdue %></strong> open</span>
-      <% if (stats.overdue > 0) { %><span class="text-red-500"><strong><%= stats.overdue %></strong> overdue</span><% } %>
-      <span><strong class="text-gray-700"><%= stats.completed %></strong> done</span>
-      <span class="text-green-600"><%= stats.completion_rate %>%</span>
+    <!-- Filters -->
+    <div id="filters" class="filter-panel <%= (filters.status || filters.employee || filters.from || filters.to) ? 'open' : '' %>">
+      <form method="GET" action="/" class="flex flex-wrap gap-2 items-center mt-3 pt-3 border-t border-subtle">
+        <select name="status" class="text-xs border border-subtle rounded-lg px-2.5 py-1.5 bg-surface text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-300">
+          <option value="">All status</option>
+          <option value="pending" <%- filters.status === 'pending' ? 'selected' : '' %>>Pending</option>
+          <option value="in_progress" <%- filters.status === 'in_progress' ? 'selected' : '' %>>In Progress</option>
+          <option value="overdue" <%- filters.status === 'overdue' ? 'selected' : '' %>>Overdue</option>
+          <option value="completed" <%- filters.status === 'completed' ? 'selected' : '' %>>Completed</option>
+        </select>
+        <select name="employee" class="text-xs border border-subtle rounded-lg px-2.5 py-1.5 bg-surface text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-300">
+          <option value="">All people</option>
+          <% employees.forEach(e => { %>
+          <option value="<%= e.id %>" <%- filters.employee == e.id ? 'selected' : '' %>><%= e.name %></option>
+          <% }) %>
+        </select>
+        <input type="date" name="from" value="<%= filters.from || '' %>" class="text-xs border border-subtle rounded-lg px-2.5 py-1.5 text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-300" />
+        <input type="date" name="to" value="<%= filters.to || '' %>" class="text-xs border border-subtle rounded-lg px-2.5 py-1.5 text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-300" />
+        <button type="submit" class="text-xs bg-accent text-white px-3 py-1.5 rounded-lg font-medium hover:bg-zinc-800 transition">Apply</button>
+        <a href="/" class="text-xs text-muted hover:text-accent transition">Reset</a>
+      </form>
     </div>
-
-    <!-- Collapsible filter -->
-    <form method="GET" action="/" class="filter-bar <%= (filters.status || filters.employee || filters.from || filters.to) ? 'active' : '' %> flex-wrap gap-2 items-center mb-4 bg-white rounded-lg border border-gray-200 p-3">
-      <select name="status" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
-        <option value="">All status</option>
-        <option value="pending" <%- filters.status === 'pending' ? 'selected' : '' %>>Pending</option>
-        <option value="in_progress" <%- filters.status === 'in_progress' ? 'selected' : '' %>>In Progress</option>
-        <option value="overdue" <%- filters.status === 'overdue' ? 'selected' : '' %>>Overdue</option>
-        <option value="completed" <%- filters.status === 'completed' ? 'selected' : '' %>>Completed</option>
-      </select>
-      <select name="employee" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
-        <option value="">All people</option>
-        <% employees.forEach(e => { %>
-        <option value="<%= e.id %>" <%- filters.employee == e.id ? 'selected' : '' %>><%= e.name %></option>
-        <% }) %>
-      </select>
-      <input type="date" name="from" value="<%= filters.from || '' %>" class="text-xs border border-gray-200 rounded-md px-2 py-1.5" />
-      <input type="date" name="to" value="<%= filters.to || '' %>" class="text-xs border border-gray-200 rounded-md px-2 py-1.5" />
-      <button type="submit" class="text-xs bg-gray-800 text-white px-3 py-1.5 rounded-md font-medium hover:bg-gray-900">Go</button>
-      <a href="/" class="text-xs text-gray-400 hover:text-gray-600 px-1">✕</a>
-    </form>
   </div>
 
-  <div class="max-w-3xl mx-auto px-4 pb-6">
+  <!-- Task sections -->
+  <div class="max-w-2xl mx-auto px-4 pb-8">
 
     <% if (tasks.length === 0) { %>
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-8 text-center text-gray-400 text-sm">No tasks yet</div>
+    <div class="bg-surface rounded-2xl border border-subtle px-4 py-10 text-center">
+      <div class="text-3xl mb-2">✨</div>
+      <p class="text-sm text-muted">No tasks yet — add one below</p>
+    </div>
     <% } else { %>
 
     <%
-      // Group active tasks by employee or group chat
       const activeTasks = tasks.filter(t => t.status !== 'completed');
       const completedTasks = tasks.filter(t => t.status === 'completed');
 
-      // Build sections: { key, label, icon, tasks[], employeeId?, groupChatId?, groupChatName? }
       const sections = [];
       const byEmployee = {};
       const unassignedByGroup = {};
@@ -83,7 +125,7 @@
           if (!byEmployee[t.employee_name]) byEmployee[t.employee_name] = { tasks: [], employeeId: t.assigned_to };
           byEmployee[t.employee_name].tasks.push(t);
         } else if (t.group_chat_name) {
-          if (!unassignedByGroup[t.group_chat_name]) unassignedByGroup[t.group_chat_name] = { tasks: [], groupChatId: t.group_chat_id };
+          if (!unassignedByGroup[t.group_chat_name]) unassignedByGroup[t.group_chat_name] = { tasks: [], groupChatId: t.group_chat_id, groupChatName: t.group_chat_name };
           unassignedByGroup[t.group_chat_name].tasks.push(t);
         } else {
           unassignedNoGroup.push(t);
@@ -91,103 +133,121 @@
       }
 
       for (const [name, data] of Object.entries(byEmployee)) {
-        sections.push({ key: 'emp-' + data.employeeId, label: name, icon: '👤', tasks: data.tasks, employeeId: data.employeeId, groupChatId: null, groupChatName: null });
+        sections.push({ key: 'emp-' + data.employeeId, label: name, icon: '👤', tasks: data.tasks, employeeId: data.employeeId, groupChatId: null, groupChatName: null, type: 'employee' });
       }
       for (const [name, data] of Object.entries(unassignedByGroup)) {
-        sections.push({ key: 'grp-' + data.groupChatId, label: name, icon: '💬', tasks: data.tasks, employeeId: null, groupChatId: data.groupChatId, groupChatName: name });
+        sections.push({ key: 'grp-' + data.groupChatId, label: name, icon: '💬', tasks: data.tasks, employeeId: null, groupChatId: data.groupChatId, groupChatName: data.groupChatName, type: 'group' });
       }
       if (unassignedNoGroup.length > 0) {
-        sections.push({ key: 'unassigned', label: 'Unassigned', icon: '📌', tasks: unassignedNoGroup, employeeId: null, groupChatId: null, groupChatName: null });
+        sections.push({ key: 'unassigned', label: 'Unassigned', icon: '📌', tasks: unassignedNoGroup, employeeId: null, groupChatId: null, groupChatName: null, type: 'none' });
       }
     %>
 
     <% sections.forEach(section => { %>
-    <div class="mb-4">
+    <div class="mb-5">
       <!-- Section header -->
-      <div class="flex items-center gap-2 mb-1 px-1">
-        <span class="text-sm"><%= section.icon %></span>
-        <span class="text-sm font-semibold text-gray-700"><%= section.label %></span>
-        <span class="text-[11px] text-gray-400"><%= section.tasks.length %></span>
+      <div class="flex items-center justify-between mb-2 px-1">
+        <div class="flex items-center gap-2">
+          <span class="text-sm"><%= section.icon %></span>
+          <span class="text-[13px] font-semibold text-zinc-700"><%= section.label %></span>
+          <span class="text-[11px] text-muted bg-zinc-100 px-1.5 py-0.5 rounded-md"><%= section.tasks.length %></span>
+        </div>
+        <!-- Send to Telegram button -->
+        <% if (section.type === 'employee' && section.employeeId) { %>
+        <form method="POST" action="/tasks/send-telegram" class="inline">
+          <input type="hidden" name="type" value="employee" />
+          <input type="hidden" name="employee_id" value="<%= section.employeeId %>" />
+          <button type="submit" class="send-btn text-[11px] text-blue-600 border border-blue-200 bg-blue-50 px-2.5 py-1 rounded-lg font-medium flex items-center gap-1" title="Send task list to <%= section.label %> on Telegram">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M20.665 3.717l-17.73 6.837c-1.21.486-1.203 1.161-.222 1.462l4.552 1.42 10.532-6.645c.498-.303.953-.14.579.192l-8.533 7.701h-.002l.002.001-.314 4.692c.46 0 .663-.211.921-.46l2.211-2.15 4.599 3.397c.848.467 1.457.227 1.668-.785l3.019-14.228c.309-1.239-.473-1.8-1.282-1.434z"/></svg>
+            Send
+          </button>
+        </form>
+        <% } else if (section.type === 'group' && section.groupChatId) { %>
+        <form method="POST" action="/tasks/send-telegram" class="inline">
+          <input type="hidden" name="type" value="group" />
+          <input type="hidden" name="group_chat_id" value="<%= section.groupChatId %>" />
+          <button type="submit" class="send-btn text-[11px] text-blue-600 border border-blue-200 bg-blue-50 px-2.5 py-1 rounded-lg font-medium flex items-center gap-1" title="Send task list to <%= section.label %> on Telegram">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M20.665 3.717l-17.73 6.837c-1.21.486-1.203 1.161-.222 1.462l4.552 1.42 10.532-6.645c.498-.303.953-.14.579.192l-8.533 7.701h-.002l.002.001-.314 4.692c.46 0 .663-.211.921-.46l2.211-2.15 4.599 3.397c.848.467 1.457.227 1.668-.785l3.019-14.228c.309-1.239-.473-1.8-1.282-1.434z"/></svg>
+            Send
+          </button>
+        </form>
+        <% } %>
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <!-- Task card -->
+      <div class="bg-surface rounded-2xl border border-subtle overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <% section.tasks.forEach(task => { %>
-        <div class="task-row flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 last:border-0">
-          <!-- Done checkbox -->
+        <div class="task-row flex items-center gap-3 px-4 py-2.5 border-b border-zinc-100/80 last:border-0 pri-<%= task.priority %>">
+          <!-- Checkbox -->
           <form method="POST" action="/tasks/<%= task.id %>/done" class="shrink-0">
             <button type="submit" title="Mark done"
-              class="w-5 h-5 rounded-full border-2 border-gray-300 hover:border-green-500 hover:bg-green-50 flex items-center justify-center transition text-transparent hover:text-green-500 text-xs">✓</button>
+              class="check-btn w-[18px] h-[18px] rounded-full border-[1.5px] border-zinc-300 flex items-center justify-center text-transparent text-[10px] leading-none">✓</button>
           </form>
 
-          <!-- Priority dot -->
-          <div class="w-2 h-2 rounded-full priority-dot-<%= task.priority %> shrink-0" title="<%= task.priority %>"></div>
-
-          <!-- Task content -->
+          <!-- Content -->
           <div class="flex-1 min-w-0">
-            <span class="text-sm text-gray-800 truncate block"><%= task.title %></span>
+            <p class="text-[13px] text-zinc-800 leading-snug truncate"><%= task.title %></p>
+            <% if (task.due_date || task.status === 'overdue') { %>
             <div class="flex items-center gap-2 mt-0.5">
               <% if (task.due_date) { %>
-              <span class="text-[11px] text-gray-400">📅 <%= new Date(task.due_date).toLocaleDateString('en-IN', {day:'numeric',month:'short'}) %></span>
+              <span class="text-[11px] text-muted"><%= new Date(task.due_date).toLocaleDateString('en-IN', {day:'numeric',month:'short'}) %></span>
               <% } %>
               <% if (task.status === 'overdue') { %>
-              <span class="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-medium">OVERDUE</span>
+              <span class="text-[10px] bg-red-50 text-red-500 px-1.5 py-0.5 rounded-md font-semibold tracking-wide">OVERDUE</span>
               <% } %>
             </div>
+            <% } %>
           </div>
 
-          <!-- Actions -->
-          <div class="task-actions flex items-center gap-1 shrink-0">
-            <form method="POST" action="/tasks/<%= task.id %>/delete" class="inline"
+          <!-- Priority + delete -->
+          <div class="flex items-center gap-2 shrink-0">
+            <div class="w-1.5 h-1.5 rounded-full dot-<%= task.priority %>" title="<%= task.priority %>"></div>
+            <form method="POST" action="/tasks/<%= task.id %>/delete" class="inline hover-show"
               onsubmit="return confirm('Delete this task?')">
-              <button type="submit" class="text-gray-300 hover:text-red-500 text-xs p-1 transition" title="Delete">🗑</button>
+              <button type="submit" class="text-zinc-300 hover:text-red-400 text-[11px] transition p-0.5">✕</button>
             </form>
           </div>
         </div>
         <% }) %>
 
-        <!-- Inline add for this section -->
-        <div class="border-t border-gray-100">
-          <button onclick="this.style.display='none'; this.nextElementSibling.classList.add('active'); this.nextElementSibling.querySelector('input[name=title]').focus();"
-            class="w-full text-left px-4 py-2 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition">
-            + Add task...
+        <!-- Inline add -->
+        <div class="border-t border-zinc-100/80" id="add-wrapper-<%= section.key %>">
+          <button onclick="this.style.display='none'; var f=document.getElementById('add-<%= section.key %>'); f.classList.add('open'); f.querySelector('input[name=title]').focus();"
+            class="w-full text-left px-4 py-2 text-[13px] text-muted hover:text-zinc-600 hover:bg-zinc-50/50 transition cursor-text">
+            + Add task…
           </button>
-          <form method="POST" action="/tasks/create" class="section-add flex-col gap-2 px-4 py-3">
-            <% if (section.employeeId) { %>
-            <input type="hidden" name="assigned_to" value="<%= section.employeeId %>" />
-            <% } %>
-            <% if (section.groupChatId) { %>
-            <input type="hidden" name="group_chat_id" value="<%= section.groupChatId %>" />
-            <% } %>
+          <form method="POST" action="/tasks/create" id="add-<%= section.key %>" class="add-row flex-col gap-2 px-4 py-3">
+            <% if (section.employeeId) { %><input type="hidden" name="assigned_to" value="<%= section.employeeId %>" /><% } %>
+            <% if (section.groupChatId) { %><input type="hidden" name="group_chat_id" value="<%= section.groupChatId %>" /><% } %>
             <div class="flex items-center gap-2">
-              <input type="text" name="title" required placeholder="Task title"
-                class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent" />
+              <input type="text" name="title" required placeholder="What needs to be done?"
+                class="flex-1 text-[13px] border border-subtle rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-zinc-200 focus:border-zinc-300 placeholder:text-zinc-300" />
               <button type="submit"
-                class="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-900 transition whitespace-nowrap">Add</button>
+                class="bg-accent text-white px-4 py-2 rounded-xl text-[13px] font-medium hover:bg-zinc-800 transition whitespace-nowrap">Add</button>
             </div>
             <div class="flex items-center gap-2 flex-wrap">
               <% if (!section.employeeId) { %>
-              <select name="assigned_to" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
-                <option value="">👤 Unassigned</option>
+              <select name="assigned_to" class="text-[11px] border border-subtle rounded-lg px-2 py-1.5 bg-surface text-zinc-500">
+                <option value="">Unassigned</option>
                 <% employees.forEach(e => { %>
                 <option value="<%= e.id %>"><%= e.name %></option>
                 <% }) %>
               </select>
               <% } %>
-              <select name="priority" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
-                <option value="medium">🟡 Medium</option>
-                <option value="high">🔴 High</option>
-                <option value="low">🟢 Low</option>
+              <select name="priority" class="text-[11px] border border-subtle rounded-lg px-2 py-1.5 bg-surface text-zinc-500">
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
               </select>
-              <input type="date" name="due_date" class="text-xs border border-gray-200 rounded-md px-2 py-1.5" />
+              <input type="date" name="due_date" class="text-[11px] border border-subtle rounded-lg px-2 py-1.5 text-zinc-500" />
               <% if (!section.groupChatId) { %>
-              <select name="group_chat_id" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
-                <option value="">💬 No group</option>
+              <select name="group_chat_id" class="text-[11px] border border-subtle rounded-lg px-2 py-1.5 bg-surface text-zinc-500">
+                <option value="">No group</option>
                 <% groupChats.forEach(gc => { %>
                 <option value="<%= gc.group_chat_id %>"><%= gc.group_chat_name %></option>
                 <% }) %>
               </select>
               <% } %>
-              <input type="text" name="description" placeholder="Description (optional)" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 flex-1 min-w-[120px]" />
             </div>
           </form>
         </div>
@@ -195,69 +255,62 @@
     </div>
     <% }) %>
 
-    <!-- General add task (always visible at bottom) -->
-    <div class="mb-4">
-      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <button onclick="this.style.display='none'; this.nextElementSibling.classList.add('active'); this.nextElementSibling.querySelector('input[name=title]').focus();"
-          class="w-full text-left px-4 py-2.5 text-sm text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition">
-          + Add new task...
+    <!-- General add task -->
+    <div class="mb-5">
+      <div class="bg-surface rounded-2xl border border-subtle overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <button onclick="this.style.display='none'; var f=document.getElementById('add-general'); f.classList.add('open'); f.querySelector('input[name=title]').focus();"
+          class="w-full text-left px-4 py-3 text-[13px] text-muted hover:text-zinc-600 hover:bg-zinc-50/50 transition cursor-text">
+          + Add new task…
         </button>
-        <form method="POST" action="/tasks/create" class="section-add flex-col gap-2 px-4 py-3">
+        <form method="POST" action="/tasks/create" id="add-general" class="add-row flex-col gap-2 px-4 py-3">
           <div class="flex items-center gap-2">
-            <input type="text" name="title" required placeholder="Task title"
-              class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent" />
+            <input type="text" name="title" required placeholder="What needs to be done?"
+              class="flex-1 text-[13px] border border-subtle rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-zinc-200 focus:border-zinc-300 placeholder:text-zinc-300" />
             <button type="submit"
-              class="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-900 transition whitespace-nowrap">Add</button>
+              class="bg-accent text-white px-4 py-2 rounded-xl text-[13px] font-medium hover:bg-zinc-800 transition whitespace-nowrap">Add</button>
           </div>
           <div class="flex items-center gap-2 flex-wrap">
-            <select name="assigned_to" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
-              <option value="">👤 Unassigned</option>
+            <select name="assigned_to" class="text-[11px] border border-subtle rounded-lg px-2 py-1.5 bg-surface text-zinc-500">
+              <option value="">Unassigned</option>
               <% employees.forEach(e => { %>
               <option value="<%= e.id %>"><%= e.name %></option>
               <% }) %>
             </select>
-            <select name="priority" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
-              <option value="medium">🟡 Medium</option>
-              <option value="high">🔴 High</option>
-              <option value="low">🟢 Low</option>
+            <select name="priority" class="text-[11px] border border-subtle rounded-lg px-2 py-1.5 bg-surface text-zinc-500">
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="low">Low</option>
             </select>
-            <input type="date" name="due_date" class="text-xs border border-gray-200 rounded-md px-2 py-1.5" />
-            <select name="group_chat_id" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
-              <option value="">💬 No group</option>
+            <input type="date" name="due_date" class="text-[11px] border border-subtle rounded-lg px-2 py-1.5 text-zinc-500" />
+            <select name="group_chat_id" class="text-[11px] border border-subtle rounded-lg px-2 py-1.5 bg-surface text-zinc-500">
+              <option value="">No group</option>
               <% groupChats.forEach(gc => { %>
               <option value="<%= gc.group_chat_id %>"><%= gc.group_chat_name %></option>
               <% }) %>
             </select>
-            <input type="text" name="description" placeholder="Description (optional)" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 flex-1 min-w-[120px]" />
           </div>
         </form>
       </div>
     </div>
 
-    <!-- Completed (collapsed) -->
+    <!-- Completed -->
     <% if (completedTasks.length > 0) { %>
-    <div class="mb-4">
-      <button onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.arrow').textContent = this.nextElementSibling.classList.contains('hidden') ? '▸' : '▾'"
-        class="text-xs text-gray-400 hover:text-gray-600 font-medium mb-1 px-1">
-        <span class="arrow">▸</span> Completed (<%= completedTasks.length %>)
+    <div class="mb-5">
+      <button onclick="var el=document.getElementById('completed-list'); el.classList.toggle('hidden'); this.querySelector('.arr').textContent = el.classList.contains('hidden') ? '›' : '‹'"
+        class="flex items-center gap-1.5 text-[12px] text-muted hover:text-zinc-600 font-medium mb-2 px-1 transition">
+        <span class="arr text-[10px]">›</span> Completed · <%= completedTasks.length %>
       </button>
-      <div class="hidden bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div id="completed-list" class="hidden bg-surface rounded-2xl border border-subtle overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <% completedTasks.forEach(task => { %>
-        <div class="task-row flex items-center gap-3 px-4 py-2 border-b border-gray-100 last:border-0 opacity-50">
-          <div class="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-xs shrink-0">✓</div>
-          <div class="w-2 h-2 rounded-full bg-gray-300 shrink-0"></div>
+        <div class="task-row flex items-center gap-3 px-4 py-2 border-b border-zinc-100/80 last:border-0 opacity-40">
+          <div class="w-[18px] h-[18px] rounded-full bg-emerald-500 flex items-center justify-center text-white text-[10px] shrink-0">✓</div>
           <div class="flex-1 min-w-0">
-            <span class="text-sm text-gray-400 line-through truncate block"><%= task.title %></span>
-            <% if (task.employee_name) { %>
-            <span class="text-[11px] text-gray-300"><%= task.employee_name %></span>
-            <% } %>
+            <p class="text-[13px] text-zinc-400 line-through truncate"><%= task.title %></p>
+            <% if (task.employee_name) { %><span class="text-[11px] text-zinc-300"><%= task.employee_name %></span><% } %>
           </div>
-          <div class="task-actions shrink-0">
-            <form method="POST" action="/tasks/<%= task.id %>/delete" class="inline"
-              onsubmit="return confirm('Delete this task?')">
-              <button type="submit" class="text-gray-300 hover:text-red-500 text-xs p-1 transition">🗑</button>
-            </form>
-          </div>
+          <form method="POST" action="/tasks/<%= task.id %>/delete" class="inline hover-show" onsubmit="return confirm('Delete?')">
+            <button type="submit" class="text-zinc-300 hover:text-red-400 text-[11px] transition p-0.5">✕</button>
+          </form>
         </div>
         <% }) %>
       </div>
@@ -266,7 +319,7 @@
 
     <% } %>
 
-    <div class="text-center text-[11px] text-gray-300 mt-4 mb-6">TaskToChat</div>
+    <p class="text-center text-[11px] text-zinc-300 mt-6 mb-4">TaskToChat</p>
   </div>
 
 </body>
