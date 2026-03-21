@@ -5,6 +5,19 @@ import { isTaskMessage, parseTaskMessage, parseMultiTaskMessage, formatDueDate }
 import { findOrCreateEmployee, autoRegisterFromTelegram } from '../models/employee';
 import { createTask, getTaskById, completeTask, getAllTasksWithEmployees, findSimilarPendingTasks } from '../models/task';
 
+function formatTaskAge(createdAt?: string): string {
+  if (!createdAt) return '';
+  const created = new Date(createdAt);
+  const now = new Date();
+  const diffMs = now.getTime() - created.getTime();
+  const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+  const dateLabel = created.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+  if (days === 0) return `_created today_`;
+  if (days === 1) return `_created ${dateLabel} · 1d ago_`;
+  return `_created ${dateLabel} · ${days}d ago_`;
+}
+
 export function createBot(): Telegraf {
   const bot = new Telegraf(config.telegram.botToken);
 
@@ -47,10 +60,11 @@ export function createBot(): Telegraf {
         const tasks = taskIds.map((id: number) => getTaskById(id)).filter(Boolean) as import('../models/task').Task[];
         const lines = tasks.map((t, i) => {
           const duePart = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
+          const age = formatTaskAge(t.created_at);
           if (t.status === 'completed') {
-            return `${i + 1}. ✅ ~${t.title}~${duePart}`;
+            return `${i + 1}. ✅ ~${t.title}~${duePart}${age ? ` ${age}` : ''}`;
           }
-          return `${i + 1}. _${t.title}_${duePart}`;
+          return `${i + 1}. _${t.title}_${duePart}${age ? ` ${age}` : ''}`;
         });
 
         const remaining = tasks.filter(t => t.status !== 'completed').length;
@@ -171,8 +185,10 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
     ? `👤 *${employee.name}*`
     : `👥 *Group*`;
 
+  const age = formatTaskAge(task.created_at);
+
   await ctx.reply(
-    `${assignedLine}\n\n1. _${task.title}_${dueLine}`,
+    `${assignedLine}\n\n1. _${task.title}_${dueLine}${age ? ` ${age}` : ''}`,
     {
       parse_mode: 'Markdown',
       reply_to_message_id: ctx.message.message_id,
@@ -222,7 +238,7 @@ async function handleMultiTaskCreation(ctx: Context & { message: { text: string;
   // Build numbered task lines
   const taskLines = createdTaskIds.map((id, i) => {
     const duePart = parsedTasks[i].dueDate ? ` _(${formatDueDate(parsedTasks[i].dueDate!)})_` : '';
-    return `${i + 1}. _${parsedTasks[i].title}_${duePart}`;
+    return `${i + 1}. _${parsedTasks[i].title}_${duePart} _created today_`;
   });
 
   // Compact buttons — two per row where possible

@@ -41,12 +41,28 @@ function priorityEmoji(priority: string): string {
   }
 }
 
+function formatTaskAge(createdAt?: string): string {
+  if (!createdAt) return '';
+  const created = new Date(createdAt);
+  const now = new Date();
+  const diffMs = now.getTime() - created.getTime();
+  const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+  const dateLabel = created.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+  if (days === 0) return `_created today_`;
+  if (days === 1) return `_created ${dateLabel} · 1d ago_`;
+  return `_created ${dateLabel} · ${days}d ago_`;
+}
+
 function formatTaskLine(task: TaskWithEmployee, index?: number): string {
   const num = index !== undefined ? `${index + 1}. ` : `#${task.id} `;
   const overdue = task.status === 'overdue' ? '[OVERDUE ⚠️] ' : '';
   const due = task.due_date ? ` (Due: ${formatDueDate(new Date(task.due_date))})` : '';
   const priority = priorityEmoji(task.priority);
-  return `${num}${overdue}${priority} ${task.title}${due}`;
+  const age = formatTaskAge(task.created_at);
+  return age
+    ? `${num}${overdue}${priority} ${task.title}${due} ${age}`
+    : `${num}${overdue}${priority} ${task.title}${due}`;
 }
 
 function formatTaskBlock(task: TaskWithEmployee): string {
@@ -56,6 +72,8 @@ function formatTaskBlock(task: TaskWithEmployee): string {
   if (task.employee_name) lines.push(`   👤 ${task.employee_name}`);
   if (task.due_date) lines.push(`   📅 Due: ${formatDueDate(new Date(task.due_date))}`);
   lines.push(`   ${priorityEmoji(task.priority)} ${task.priority} priority | ${task.status}`);
+  const age = formatTaskAge(task.created_at);
+  if (age) lines.push(`   ${age}`);
   return lines.join('\n');
 }
 
@@ -256,7 +274,8 @@ export function registerCommands(bot: Telegraf): void {
       const lines = tasks.map((t, i) => {
         const due = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
         const overdue = t.status === 'overdue' ? ' ⚠️' : '';
-        return `${i + 1}. _${t.title}_${due}${overdue}`;
+        const age = formatTaskAge(t.created_at);
+        return `${i + 1}. _${t.title}_${due}${overdue}${age ? ` ${age}` : ''}`;
       });
       return ctx.reply(
         `👤 *${employee.name}* — ${tasks.length} task(s)\n\n${lines.join('\n')}`,
@@ -294,7 +313,8 @@ export function registerCommands(bot: Telegraf): void {
       const lines = empTasks.map((t, i) => {
         const due = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
         const overdue = t.status === 'overdue' ? ' ⚠️' : '';
-        return `  ${i + 1}. _${t.title}_${due}${overdue}`;
+        const age = formatTaskAge(t.created_at);
+        return `  ${i + 1}. _${t.title}_${due}${overdue}${age ? ` ${age}` : ''}`;
       });
       sections.push(`👤 *${name}* (${empTasks.length})\n${lines.join('\n')}`);
     }
@@ -302,7 +322,8 @@ export function registerCommands(bot: Telegraf): void {
       const lines = unassigned.map((t, i) => {
         const due = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
         const overdue = t.status === 'overdue' ? ' ⚠️' : '';
-        return `  ${i + 1}. _${t.title}_${due}${overdue}`;
+        const age = formatTaskAge(t.created_at);
+        return `  ${i + 1}. _${t.title}_${due}${overdue}${age ? ` ${age}` : ''}`;
       });
       sections.push(`👥 *Group* (${unassigned.length})\n${lines.join('\n')}`);
     }
