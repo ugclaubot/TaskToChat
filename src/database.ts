@@ -73,6 +73,17 @@ function runMigrations(db: Database.Database): void {
     // Column already exists, ignore
   }
 
+  // Admins table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS admins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_user_id TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      added_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);

@@ -3,7 +3,7 @@ import { config } from '../config';
 import { registerCommands } from './commands';
 import { isTaskMessage, parseTaskMessage, parseMultiTaskMessage, formatDueDate } from './taskParser';
 import { findOrCreateEmployee, autoRegisterFromTelegram } from '../models/employee';
-import { createTask, getTaskById, completeTask, getAllTasksWithEmployees } from '../models/task';
+import { createTask, getTaskById, completeTask, getAllTasksWithEmployees, findSimilarPendingTasks } from '../models/task';
 
 export function createBot(): Telegraf {
   const bot = new Telegraf(config.telegram.botToken);
@@ -143,6 +143,16 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
   let employee = null;
   if (parsed.assigneeName) {
     employee = findOrCreateEmployee(parsed.assigneeName);
+  }
+
+  // Check for duplicate/similar tasks
+  const similar = findSimilarPendingTasks(parsed.title, employee?.id, String(chat.id));
+  if (similar.length > 0) {
+    const dupeLines = similar.map(t => `• _${t.title}_ (${t.status})`).join('\n');
+    await ctx.reply(
+      `⚠️ Similar pending task(s) found:\n\n${dupeLines}\n\nCreating anyway...`,
+      { parse_mode: 'Markdown', reply_to_message_id: ctx.message.message_id } as any
+    ).catch(() => {});
   }
 
   const task = createTask({

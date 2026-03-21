@@ -83,6 +83,61 @@ export function getTasksByEmployee(employeeId: number, status?: TaskStatus): Tas
     .all(employeeId) as Task[];
 }
 
+/**
+ * Find existing pending tasks similar to the given title for the same assignee.
+ */
+export function findSimilarPendingTasks(title: string, assignedTo?: number, groupChatId?: string): TaskWithEmployee[] {
+  const db = getDb();
+  const words = title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  if (words.length === 0) return [];
+
+  const conditions: string[] = ["t.status IN ('pending','in_progress','overdue')"];
+  const values: unknown[] = [];
+
+  if (assignedTo) {
+    conditions.push('t.assigned_to = ?');
+    values.push(assignedTo);
+  }
+  if (groupChatId) {
+    conditions.push('t.group_chat_id = ?');
+    values.push(groupChatId);
+  }
+
+  // Match any significant word in the title
+  const wordConditions = words.map(w => {
+    values.push(`%${w}%`);
+    return 'lower(t.title) LIKE ?';
+  });
+  conditions.push(`(${wordConditions.join(' OR ')})`);
+
+  const where = conditions.join(' AND ');
+  return db.prepare(
+    `SELECT t.*, e.name as employee_name, e.telegram_username as employee_username, e.whatsapp_number as employee_whatsapp
+     FROM tasks t LEFT JOIN employees e ON t.assigned_to = e.id
+     WHERE ${where} LIMIT 5`
+  ).all(...values) as TaskWithEmployee[];
+}
+
+export function getTasksByGroupChat(groupChatId: string, status?: TaskStatus): TaskWithEmployee[] {
+  const db = getDb();
+  const conditions = ['t.group_chat_id = ?'];
+  const values: unknown[] = [groupChatId];
+
+  if (status) {
+    conditions.push('t.status = ?');
+    values.push(status);
+  } else {
+    conditions.push("t.status != 'completed'");
+  }
+
+  return db.prepare(
+    `SELECT t.*, e.name as employee_name, e.telegram_username as employee_username, e.whatsapp_number as employee_whatsapp
+     FROM tasks t LEFT JOIN employees e ON t.assigned_to = e.id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY e.name, t.status, t.due_date ASC`
+  ).all(...values) as TaskWithEmployee[];
+}
+
 export function getAllTasksWithEmployees(filters?: {
   status?: TaskStatus;
   employeeId?: number;

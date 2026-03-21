@@ -11,14 +11,17 @@ import {
   completeTask,
   findTasksByKeywords,
   getTaskById,
+  getTasksByGroupChat,
   TaskWithEmployee,
   updateOverdueTasks,
 } from '../models/task';
+import { isAdmin, addAdmin, removeAdmin, getAllAdmins } from '../models/admin';
 import { formatDueDate } from './taskParser';
 
-function isManager(ctx: Context): boolean {
+function isManagerOrAdmin(ctx: Context): boolean {
   const userId = ctx.from?.id?.toString();
-  return userId === config.manager.telegramId || config.manager.telegramId === '';
+  if (!userId) return false;
+  return isAdmin(userId);
 }
 
 function statusEmoji(status: string): string {
@@ -92,17 +95,69 @@ export function registerCommands(bot: Telegraf): void {
       '/mytasks — Your own tasks\n' +
       '/done <ID or keywords> — Mark task complete\n' +
       '/overdue — All overdue tasks\n\n' +
-      '*Admin (Manager only):*\n' +
+      '*Admin:*\n' +
+      '/addadmin (reply to a user) — Make them admin\n' +
+      '/removeadmin (reply to a user) — Remove admin\n' +
+      '/admins — List all admins\n' +
       '/addemployee Name @username 91XXXXXXXXXX\n' +
       '/employees — List all employees',
       { parse_mode: 'Markdown' }
     );
   });
 
+  // /addadmin — reply to a user's message to make them admin
+  bot.command('addadmin', (ctx) => {
+    if (!isManagerOrAdmin(ctx)) {
+      return ctx.reply('❌ Only admins can add other admins.');
+    }
+
+    const reply = ctx.message.reply_to_message;
+    if (!reply || !reply.from) {
+      return ctx.reply('❌ Reply to a user\'s message with /addadmin to make them admin.');
+    }
+
+    const targetId = String(reply.from.id);
+    const targetName = reply.from.first_name + (reply.from.last_name ? ' ' + reply.from.last_name : '');
+    const addedBy = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name ?? 'Unknown';
+
+    const admin = addAdmin(targetId, targetName, addedBy);
+    ctx.reply(`✅ *${admin.name}* is now an admin!`, { parse_mode: 'Markdown' });
+  });
+
+  // /removeadmin — reply to a user's message to remove admin
+  bot.command('removeadmin', (ctx) => {
+    const userId = ctx.from?.id?.toString();
+    if (!userId || userId !== config.manager.telegramId) {
+      return ctx.reply('❌ Only the owner can remove admins.');
+    }
+
+    const reply = ctx.message.reply_to_message;
+    if (!reply || !reply.from) {
+      return ctx.reply('❌ Reply to a user\'s message with /removeadmin.');
+    }
+
+    const targetId = String(reply.from.id);
+    const removed = removeAdmin(targetId);
+    if (removed) {
+      ctx.reply(`✅ Admin removed.`);
+    } else {
+      ctx.reply(`ℹ️ That user wasn't an admin.`);
+    }
+  });
+
+  // /admins — list all admins
+  bot.command('admins', (ctx) => {
+    const admins = getAllAdmins();
+    const lines = admins.map((a, i) => `${i + 1}. *${a.name}*`);
+    const ownerLine = `👑 *Owner:* ${config.manager.name}`;
+    const adminLines = lines.length > 0 ? '\n' + lines.join('\n') : '\n_No additional admins_';
+    ctx.reply(`${ownerLine}${adminLines}`, { parse_mode: 'Markdown' });
+  });
+
   // /addemployee Name @username 919810XXXXXX
   bot.command('addemployee', (ctx) => {
-    if (!isManager(ctx)) {
-      return ctx.reply('❌ Only the manager can add employees.');
+    if (!isManagerOrAdmin(ctx)) {
+      return ctx.reply('❌ Only admins can add employees.');
     }
 
     const args = ctx.message.text.replace('/addemployee', '').trim();
@@ -174,65 +229,86 @@ export function registerCommands(bot: Telegraf): void {
     });
   });
 
-  // /tasks or /tasks @person
+  // /tasks or /tasks @person — in groups, auto-scoped to that group
   bot.command('tasks', (ctx) => {
     updateOverdueTasks();
 
     const arg = ctx.message.text.replace('/tasks', '').trim();
-    let tasks: TaskWithEmployee[];
+    const chatId = String(ctx.message.chat.id);
+    const isGroup = ctx.message.chat.type !== 'private';
+    const groupName = isGroup ? ((ctx.message.chat as any).title ?? 'This group') : null;
 
+    // /tasks @person — filter by person
     if (arg) {
       const employee = findEmployee(arg);
       if (!employee) {
-        return ctx.reply(`❌ Employee "${arg}" not found. Check /employees for the list.`);
+        return ctx.reply(`❌ "${arg}" not found.`);
       }
-      tasks = getAllTasksWithEmployees({ employeeId: employee.id }).filter(
-        (t) => t.status !== 'completed'
-      );
+      let tasks: TaskWithEmployee[];
+      if (isGroup) {
+        tasks = getTasksByGroupChat(chatId).filter(t => t.assigned_to === employee.id);
+      } else {
+        tasks = getAllTasksWithEmployees({ employeeId: employee.id }).filter(t => t.status !== 'completed');
+      }
       if (tasks.length === 0) {
         return ctx.reply(`✅ No pending tasks for *${employee.name}*!`, { parse_mode: 'Markdown' });
       }
-      const lines = tasks.map((t, i) => formatTaskLine(t, i));
-      ctx.reply(
-        `📋 *Tasks for ${employee.name}* (${tasks.length})\n\n${lines.join('\n')}`,
-        { parse_mode: 'Markdown' }
-      );
-    } else {
-      tasks = getAllTasksWithEmployees().filter((t) => t.status !== 'completed');
-
-      if (tasks.length === 0) {
-        return ctx.reply('✅ No pending tasks! Everyone is caught up.');
-      }
-
-      // Group by employee
-      const byEmployee: Record<string, TaskWithEmployee[]> = {};
-      const unassigned: TaskWithEmployee[] = [];
-
-      for (const task of tasks) {
-        if (task.employee_name) {
-          const key = task.employee_name;
-          if (!byEmployee[key]) byEmployee[key] = [];
-          byEmployee[key].push(task);
-        } else {
-          unassigned.push(task);
-        }
-      }
-
-      const sections: string[] = [];
-      for (const [name, empTasks] of Object.entries(byEmployee)) {
-        const lines = empTasks.map((t, i) => formatTaskLine(t, i));
-        sections.push(`👤 *${name}* (${empTasks.length})\n${lines.join('\n')}`);
-      }
-      if (unassigned.length > 0) {
-        const lines = unassigned.map((t, i) => formatTaskLine(t, i));
-        sections.push(`❓ *Unassigned* (${unassigned.length})\n${lines.join('\n')}`);
-      }
-
-      ctx.reply(
-        `📋 *All Pending Tasks* (${tasks.length})\n\n${sections.join('\n\n')}`,
+      const lines = tasks.map((t, i) => {
+        const due = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
+        const overdue = t.status === 'overdue' ? ' ⚠️' : '';
+        return `${i + 1}. _${t.title}_${due}${overdue}`;
+      });
+      return ctx.reply(
+        `👤 *${employee.name}* — ${tasks.length} task(s)\n\n${lines.join('\n')}`,
         { parse_mode: 'Markdown' }
       );
     }
+
+    // /tasks — show all, grouped by person
+    let tasks: TaskWithEmployee[];
+    if (isGroup) {
+      tasks = getTasksByGroupChat(chatId);
+    } else {
+      tasks = getAllTasksWithEmployees().filter(t => t.status !== 'completed');
+    }
+
+    if (tasks.length === 0) {
+      return ctx.reply('✅ No pending tasks!');
+    }
+
+    // Group by employee
+    const byEmployee: Record<string, TaskWithEmployee[]> = {};
+    const unassigned: TaskWithEmployee[] = [];
+
+    for (const task of tasks) {
+      if (task.employee_name) {
+        if (!byEmployee[task.employee_name]) byEmployee[task.employee_name] = [];
+        byEmployee[task.employee_name].push(task);
+      } else {
+        unassigned.push(task);
+      }
+    }
+
+    const sections: string[] = [];
+    for (const [name, empTasks] of Object.entries(byEmployee)) {
+      const lines = empTasks.map((t, i) => {
+        const due = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
+        const overdue = t.status === 'overdue' ? ' ⚠️' : '';
+        return `  ${i + 1}. _${t.title}_${due}${overdue}`;
+      });
+      sections.push(`👤 *${name}* (${empTasks.length})\n${lines.join('\n')}`);
+    }
+    if (unassigned.length > 0) {
+      const lines = unassigned.map((t, i) => {
+        const due = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
+        const overdue = t.status === 'overdue' ? ' ⚠️' : '';
+        return `  ${i + 1}. _${t.title}_${due}${overdue}`;
+      });
+      sections.push(`👥 *Group* (${unassigned.length})\n${lines.join('\n')}`);
+    }
+
+    const header = isGroup ? `📋 *${groupName}* — ${tasks.length} task(s)` : `📋 *All Tasks* — ${tasks.length}`;
+    ctx.reply(`${header}\n\n${sections.join('\n\n')}`, { parse_mode: 'Markdown' });
   });
 
   // /mytasks
