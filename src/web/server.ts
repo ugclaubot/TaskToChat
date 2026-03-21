@@ -3,14 +3,33 @@ import path from 'path';
 import { config } from '../config';
 import router from './routes';
 
+function basicAuth(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Basic ')) {
+    res.setHeader('WWW-Authenticate', 'Basic realm="TaskToChat"');
+    res.status(401).send('Authentication required');
+    return;
+  }
+
+  const credentials = Buffer.from(authHeader.split(' ')[1], 'base64').toString();
+  const [user, pass] = credentials.split(':');
+
+  const validUser = process.env.DASHBOARD_USER || 'admin';
+  const validPass = process.env.DASHBOARD_PASS || 'tasktochat2026';
+
+  if (user === validUser && pass === validPass) {
+    next();
+  } else {
+    res.setHeader('WWW-Authenticate', 'Basic realm="TaskToChat"');
+    res.status(401).send('Invalid credentials');
+  }
+}
+
 export function createServer(): express.Application {
   const app = express();
 
   // Configure EJS
-  // Views are in src/web/views/ — at runtime this path works whether we're in src/ or dist/
-  // because we serve from project root level
   app.set('view engine', 'ejs');
-  // Support both dev (ts-node) and prod (node dist/) execution paths
   const viewsDir = path.join(__dirname, '..', '..', 'src', 'web', 'views');
   const fallbackDir = path.join(__dirname, 'views');
   const fs = require('fs');
@@ -19,6 +38,9 @@ export function createServer(): express.Application {
   // Body parsing
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+
+  // Basic auth on all routes
+  app.use(basicAuth);
 
   // Mount routes
   app.use('/', router);
