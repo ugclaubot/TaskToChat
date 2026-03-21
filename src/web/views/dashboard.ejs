@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChatFlow Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .badge-pending    { background:#fef3c7; color:#92400e; }
+    .badge-in_progress{ background:#dbeafe; color:#1e40af; }
+    .badge-overdue    { background:#fee2e2; color:#991b1b; }
+    .badge-completed  { background:#d1fae5; color:#065f46; }
+    .priority-high    { border-left: 4px solid #ef4444; }
+    .priority-medium  { border-left: 4px solid #f59e0b; }
+    .priority-low     { border-left: 4px solid #10b981; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">📋</span>
+        <h1 class="text-xl font-bold text-gray-900">ChatFlow</h1>
+        <span class="text-sm text-gray-400">Task Tracker</span>
+      </div>
+      <span class="text-sm text-gray-500">Last updated: <%= new Date().toLocaleString('en-IN', {timeZone:'Asia/Kolkata'}) %> IST</span>
+    </div>
+  </header>
+
+  <div class="max-w-7xl mx-auto px-4 py-6">
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
+        <div class="text-3xl font-bold text-gray-800"><%= stats.total %></div>
+        <div class="text-xs text-gray-500 mt-1 uppercase tracking-wide">Total Tasks</div>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
+        <div class="text-3xl font-bold text-yellow-600"><%= stats.pending %></div>
+        <div class="text-xs text-gray-500 mt-1 uppercase tracking-wide">Pending</div>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
+        <div class="text-3xl font-bold text-blue-600"><%= stats.in_progress %></div>
+        <div class="text-xs text-gray-500 mt-1 uppercase tracking-wide">In Progress</div>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
+        <div class="text-3xl font-bold text-red-600"><%= stats.overdue %></div>
+        <div class="text-xs text-gray-500 mt-1 uppercase tracking-wide">Overdue</div>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
+        <div class="text-3xl font-bold text-green-600"><%= stats.completion_rate %>%</div>
+        <div class="text-xs text-gray-500 mt-1 uppercase tracking-wide">Completion Rate</div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <form method="GET" action="/" class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-6">
+      <div class="flex flex-wrap gap-3 items-end">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1 font-medium">Status</label>
+          <select name="status" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+            <option value="">All Statuses</option>
+            <option value="pending" <%- filters.status === 'pending' ? 'selected' : '' %>>Pending</option>
+            <option value="in_progress" <%- filters.status === 'in_progress' ? 'selected' : '' %>>In Progress</option>
+            <option value="overdue" <%- filters.status === 'overdue' ? 'selected' : '' %>>Overdue</option>
+            <option value="completed" <%- filters.status === 'completed' ? 'selected' : '' %>>Completed</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1 font-medium">Employee</label>
+          <select name="employee" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+            <option value="">All Employees</option>
+            <% employees.forEach(e => { %>
+            <option value="<%= e.id %>" <%- filters.employee == e.id ? 'selected' : '' %>><%= e.name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1 font-medium">From Date</label>
+          <input type="date" name="from" value="<%= filters.from || '' %>" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-500 mb-1 font-medium">To Date</label>
+          <input type="date" name="to" value="<%= filters.to || '' %>" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+        </div>
+        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition">Filter</button>
+        <a href="/" class="text-sm text-gray-500 hover:text-gray-700 py-2">Clear</a>
+      </div>
+    </form>
+
+    <!-- Tasks grouped by employee -->
+    <% if (Object.keys(tasksByEmployee).length === 0) { %>
+    <div class="bg-white rounded-xl p-12 text-center shadow-sm border border-gray-100">
+      <div class="text-5xl mb-3">✅</div>
+      <h3 class="text-lg font-semibold text-gray-700">No tasks found</h3>
+      <p class="text-gray-400 text-sm mt-1">Try adjusting your filters or create tasks via Telegram</p>
+    </div>
+    <% } else { %>
+
+    <% Object.entries(tasksByEmployee).forEach(([groupName, groupTasks]) => { %>
+    <div class="mb-6">
+      <div class="flex items-center gap-2 mb-3">
+        <h2 class="text-base font-semibold text-gray-800">👤 <%= groupName %></h2>
+        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full"><%= groupTasks.length %> task<%= groupTasks.length !== 1 ? 's' : '' %></span>
+      </div>
+
+      <div class="space-y-2">
+        <% groupTasks.forEach(task => { %>
+        <div class="bg-white rounded-lg p-4 shadow-sm border border-gray-100 priority-<%= task.priority %> hover:shadow-md transition">
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs text-gray-400 font-mono">#<%= task.id %></span>
+                <span class="font-medium text-gray-800 truncate"><%= task.title %></span>
+                <% if (task.description) { %>
+                <span class="text-xs text-gray-500 truncate hidden sm:inline"><%= task.description %></span>
+                <% } %>
+              </div>
+              <div class="flex items-center gap-3 mt-2 flex-wrap">
+                <span class="text-xs px-2 py-0.5 rounded-full badge-<%= task.status %> font-medium capitalize">
+                  <%= task.status.replace('_', ' ') %>
+                </span>
+                <% if (task.due_date) { %>
+                <span class="text-xs text-gray-500">
+                  📅 Due: <%= new Date(task.due_date).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) %>
+                </span>
+                <% } %>
+                <span class="text-xs text-gray-400">
+                  By <%= task.assigned_by %>
+                </span>
+                <% if (task.group_chat_name) { %>
+                <span class="text-xs text-gray-400">in <%= task.group_chat_name %></span>
+                <% } %>
+                <% if (task.reminder_count > 0) { %>
+                <span class="text-xs text-gray-400">🔔 <%= task.reminder_count %> reminder<%= task.reminder_count !== 1 ? 's' : '' %></span>
+                <% } %>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <% const priorityColor = {high:'text-red-500',medium:'text-yellow-500',low:'text-green-500'} %>
+              <span class="text-xs <%= priorityColor[task.priority] || 'text-gray-400' %> capitalize font-medium hidden sm:inline"><%= task.priority %></span>
+              <span class="text-xs text-gray-300">
+                <%= new Date(task.created_at).toLocaleDateString('en-IN', {day:'numeric',month:'short'}) %>
+              </span>
+            </div>
+          </div>
+        </div>
+        <% }) %>
+      </div>
+    </div>
+    <% }) %>
+
+    <% } %>
+
+    <!-- Footer -->
+    <div class="mt-8 text-center text-xs text-gray-400">
+      ChatFlow &mdash; Task Tracker &mdash; <%= stats.total %> total tasks
+    </div>
+  </div>
+
+</body>
+</html>
