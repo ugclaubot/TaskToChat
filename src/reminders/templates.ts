@@ -64,6 +64,56 @@ export function eveningEmployeeMessage(employeeName: string, tasks: TaskWithEmpl
   return lines.join('\n');
 }
 
+export function groupMorningMessage(groupName: string, tasks: TaskWithEmployee[]): string {
+  const overdue = tasks.filter((t) => t.status === 'overdue');
+  const pending = tasks.filter((t) => t.status !== 'overdue');
+
+  const lines: string[] = [
+    `📋 Good morning! Pending tasks in ${groupName}:\n`,
+  ];
+
+  let index = 1;
+  for (const task of [...overdue, ...pending]) {
+    const isOverdue = task.status === 'overdue';
+    const dueStr = task.due_date ? ` (Due: ${formatDueDate(new Date(task.due_date))})` : '';
+    const overdueTag = isOverdue ? '[OVERDUE ⚠️] ' : '';
+    lines.push(`${index}. ${overdueTag}${task.title}${dueStr}`);
+    index++;
+  }
+
+  lines.push('');
+  lines.push(`Total: ${tasks.length} pending${overdue.length > 0 ? `, ${overdue.length} overdue` : ''}`);
+  lines.push('\nPlease pick up or update these tasks! 💪');
+
+  return lines.join('\n');
+}
+
+export function groupEveningMessage(groupName: string, tasks: TaskWithEmployee[]): string {
+  const overdue = tasks.filter((t) => t.status === 'overdue');
+  const pending = tasks.filter((t) => t.status !== 'overdue');
+
+  const lines: string[] = [
+    `🌆 End-of-day reminder! Pending tasks in ${groupName}:\n`,
+  ];
+
+  let index = 1;
+  for (const task of [...overdue, ...pending]) {
+    const isOverdue = task.status === 'overdue';
+    const dueStr = task.due_date ? ` (Due: ${formatDueDate(new Date(task.due_date))})` : '';
+    const overdueTag = isOverdue ? '[OVERDUE ⚠️] ' : '';
+    lines.push(`${index}. ${overdueTag}${task.title}${dueStr}`);
+    index++;
+  }
+
+  lines.push('');
+  if (overdue.length > 0) {
+    lines.push(`⚠️ ${overdue.length} overdue task${overdue.length > 1 ? 's' : ''} need attention!`);
+  }
+  lines.push(`Total: ${tasks.length} still pending`);
+
+  return lines.join('\n');
+}
+
 export function managerMorningSummary(
   managerName: string,
   tasksByEmployee: Record<string, { employee: string; tasks: TaskWithEmployee[] }>

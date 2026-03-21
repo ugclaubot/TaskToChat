@@ -1,9 +1,9 @@
 import cron from 'node-cron';
 import { Telegraf } from 'telegraf';
 import { getAllEmployees } from '../models/employee';
-import { getPendingTasksForEmployee, updateOverdueTasks, incrementReminderCount, TaskWithEmployee } from '../models/task';
+import { getPendingTasksForEmployee, getUnassignedPendingTasksByGroup, updateOverdueTasks, incrementReminderCount, TaskWithEmployee } from '../models/task';
 import { sendWhatsAppSafe } from './whatsapp';
-import { morningEmployeeMessage, eveningEmployeeMessage, managerMorningSummary } from './templates';
+import { morningEmployeeMessage, eveningEmployeeMessage, managerMorningSummary, groupMorningMessage, groupEveningMessage } from './templates';
 import { config } from '../config';
 
 /**
@@ -62,6 +62,21 @@ async function runMorningReminders(bot: Telegraf): Promise<void> {
     }
   }
 
+  // Send reminders for unassigned tasks to their group chats
+  const unassignedGroups = getUnassignedPendingTasksByGroup();
+  for (const [groupChatId, group] of Object.entries(unassignedGroups)) {
+    try {
+      const msg = groupMorningMessage(group.groupChatName, group.tasks);
+      await bot.telegram.sendMessage(groupChatId, msg);
+      for (const task of group.tasks) {
+        incrementReminderCount(task.id);
+      }
+      console.log(`[Cron] Morning group reminder sent to ${group.groupChatName} (${group.tasks.length} tasks)`);
+    } catch (err: unknown) {
+      console.warn(`[Cron] Failed to send morning reminder to group ${group.groupChatName}:`, err);
+    }
+  }
+
   // Send consolidated summary to manager via Telegram
   if (config.manager.telegramId) {
     try {
@@ -96,6 +111,21 @@ async function runEveningReminders(bot: Telegraf): Promise<void> {
       console.log(`[Cron] Evening reminder sent to ${employee.name}`);
     } else {
       console.warn(`[Cron] Could not reach ${employee.name}`);
+    }
+  }
+
+  // Send reminders for unassigned tasks to their group chats
+  const unassignedGroups = getUnassignedPendingTasksByGroup();
+  for (const [groupChatId, group] of Object.entries(unassignedGroups)) {
+    try {
+      const msg = groupEveningMessage(group.groupChatName, group.tasks);
+      await bot.telegram.sendMessage(groupChatId, msg);
+      for (const task of group.tasks) {
+        incrementReminderCount(task.id);
+      }
+      console.log(`[Cron] Evening group reminder sent to ${group.groupChatName} (${group.tasks.length} tasks)`);
+    } catch (err: unknown) {
+      console.warn(`[Cron] Failed to send evening reminder to group ${group.groupChatName}:`, err);
     }
   }
 }

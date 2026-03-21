@@ -261,6 +261,27 @@ export function findTasksByKeywords(keywords: string, employeeId?: number): Task
     .all(term, term) as Task[];
 }
 
+export function getUnassignedPendingTasksByGroup(): Record<string, { groupChatId: string; groupChatName: string; tasks: TaskWithEmployee[] }> {
+  const db = getDb();
+  const tasks = db.prepare(
+    `SELECT t.*, NULL as employee_name, NULL as employee_username, NULL as employee_whatsapp
+     FROM tasks t
+     WHERE t.assigned_to IS NULL AND t.status IN ('pending','in_progress','overdue')
+     AND t.group_chat_id IS NOT NULL
+     ORDER BY t.group_chat_id, t.status = 'overdue' DESC, t.due_date ASC`
+  ).all() as TaskWithEmployee[];
+
+  const grouped: Record<string, { groupChatId: string; groupChatName: string; tasks: TaskWithEmployee[] }> = {};
+  for (const task of tasks) {
+    const gid = task.group_chat_id!;
+    if (!grouped[gid]) {
+      grouped[gid] = { groupChatId: gid, groupChatName: task.group_chat_name || 'Unknown Group', tasks: [] };
+    }
+    grouped[gid].tasks.push(task);
+  }
+  return grouped;
+}
+
 export function getTaskStats(): {
   total: number;
   completed: number;
