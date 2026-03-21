@@ -3,244 +3,198 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TaskToChat Dashboard</title>
+  <title>TaskToChat</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] } } } }</script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
-    .badge-pending    { background:#fef3c7; color:#92400e; }
-    .badge-in_progress{ background:#dbeafe; color:#1e40af; }
-    .badge-overdue    { background:#fee2e2; color:#991b1b; }
-    .badge-completed  { background:#d1fae5; color:#065f46; }
-    .priority-high    { border-left: 4px solid #ef4444; }
-    .priority-medium  { border-left: 4px solid #f59e0b; }
-    .priority-low     { border-left: 4px solid #10b981; }
+    * { font-family: 'Inter', system-ui, sans-serif; }
+    .task-row:hover { background: #f8fafc; }
+    .task-row:hover .task-actions { opacity: 1; }
+    .task-actions { opacity: 0; transition: opacity 0.15s; }
+    @media (max-width: 640px) { .task-actions { opacity: 1; } }
+    .priority-dot-high { background: #ef4444; }
+    .priority-dot-medium { background: #f59e0b; }
+    .priority-dot-low { background: #22c55e; }
+    .add-form { display: none; }
+    .add-form.active { display: flex; }
+    .filter-bar { display: none; }
+    .filter-bar.active { display: flex; }
   </style>
 </head>
-<body class="bg-gray-50 min-h-screen font-sans">
+<body class="bg-[#fafafa] min-h-screen">
 
-  <!-- Header -->
-  <header class="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <span class="text-2xl">📋</span>
-        <h1 class="text-xl font-bold text-gray-900">TaskToChat</h1>
-        <span class="text-sm text-gray-400 hidden sm:inline">Task Tracker</span>
-      </div>
-      <div class="flex items-center gap-3">
-        <span class="text-xs text-gray-500 hidden sm:inline">Updated: <%= new Date().toLocaleString('en-IN', {timeZone:'Asia/Kolkata'}) %> IST</span>
-        <button onclick="document.getElementById('add-task-modal').classList.remove('hidden')"
-          class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition flex items-center gap-1">
-          <span>+</span><span>Add Task</span>
-        </button>
+  <!-- Minimal header -->
+  <div class="max-w-3xl mx-auto px-4 pt-6 pb-2">
+    <div class="flex items-center justify-between mb-1">
+      <h1 class="text-lg font-bold text-gray-900 tracking-tight">📋 TaskToChat</h1>
+      <div class="flex items-center gap-2">
+        <button onclick="document.querySelector('.filter-bar').classList.toggle('active')"
+          class="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded transition">⚙ Filter</button>
       </div>
     </div>
-  </header>
 
-  <!-- Add Task Modal -->
-  <div id="add-task-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg">
-      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-        <h2 class="text-lg font-semibold text-gray-800">New Task</h2>
-        <button onclick="document.getElementById('add-task-modal').classList.add('hidden')"
-          class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-      </div>
-      <form method="POST" action="/tasks/create" class="px-6 py-5 space-y-4">
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Title <span class="text-red-500">*</span></label>
-          <input type="text" name="title" required placeholder="Task title"
-            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Description</label>
-          <textarea name="description" rows="2" placeholder="Optional details"
-            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"></textarea>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Assign To</label>
-            <select name="assigned_to"
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-              <option value="">Unassigned</option>
-              <% employees.forEach(e => { %>
-              <option value="<%= e.id %>"><%= e.name %></option>
-              <% }) %>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Priority</label>
-            <select name="priority"
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="low">Low</option>
-            </select>
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Due Date</label>
-            <input type="date" name="due_date"
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Group Chat</label>
-            <select name="group_chat_id"
-              class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-              <option value="">None</option>
-              <% groupChats.forEach(gc => { %>
-              <option value="<%= gc.group_chat_id %>"><%= gc.group_chat_name %></option>
-              <% }) %>
-            </select>
-          </div>
-        </div>
-        <div class="flex justify-end gap-2 pt-1">
-          <button type="button" onclick="document.getElementById('add-task-modal').classList.add('hidden')"
-            class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50 transition">Cancel</button>
-          <button type="submit"
-            class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition">Create Task</button>
-        </div>
-      </form>
+    <!-- Quick stats inline -->
+    <div class="flex items-center gap-4 text-xs text-gray-400 mb-4">
+      <span><strong class="text-gray-700"><%= stats.pending + stats.in_progress + stats.overdue %></strong> open</span>
+      <% if (stats.overdue > 0) { %><span class="text-red-500"><strong><%= stats.overdue %></strong> overdue</span><% } %>
+      <span><strong class="text-gray-700"><%= stats.completed %></strong> done</span>
+      <span class="text-green-600"><%= stats.completion_rate %>%</span>
     </div>
+
+    <!-- Collapsible filter -->
+    <form method="GET" action="/" class="filter-bar <%= (filters.status || filters.employee || filters.from || filters.to) ? 'active' : '' %> flex-wrap gap-2 items-center mb-4 bg-white rounded-lg border border-gray-200 p-3">
+      <select name="status" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
+        <option value="">All status</option>
+        <option value="pending" <%- filters.status === 'pending' ? 'selected' : '' %>>Pending</option>
+        <option value="in_progress" <%- filters.status === 'in_progress' ? 'selected' : '' %>>In Progress</option>
+        <option value="overdue" <%- filters.status === 'overdue' ? 'selected' : '' %>>Overdue</option>
+        <option value="completed" <%- filters.status === 'completed' ? 'selected' : '' %>>Completed</option>
+      </select>
+      <select name="employee" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
+        <option value="">All people</option>
+        <% employees.forEach(e => { %>
+        <option value="<%= e.id %>" <%- filters.employee == e.id ? 'selected' : '' %>><%= e.name %></option>
+        <% }) %>
+      </select>
+      <input type="date" name="from" value="<%= filters.from || '' %>" class="text-xs border border-gray-200 rounded-md px-2 py-1.5" />
+      <input type="date" name="to" value="<%= filters.to || '' %>" class="text-xs border border-gray-200 rounded-md px-2 py-1.5" />
+      <button type="submit" class="text-xs bg-gray-800 text-white px-3 py-1.5 rounded-md font-medium hover:bg-gray-900">Go</button>
+      <a href="/" class="text-xs text-gray-400 hover:text-gray-600 px-1">✕</a>
+    </form>
   </div>
 
-  <div class="max-w-7xl mx-auto px-4 py-6">
+  <!-- Task list -->
+  <div class="max-w-3xl mx-auto px-4">
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
 
-    <!-- Stats Cards -->
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
-        <div class="text-3xl font-bold text-gray-800"><%= stats.total %></div>
-        <div class="text-xs text-gray-500 mt-1 uppercase tracking-wide">Total</div>
-      </div>
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
-        <div class="text-3xl font-bold text-yellow-600"><%= stats.pending %></div>
-        <div class="text-xs text-gray-500 mt-1 uppercase tracking-wide">Pending</div>
-      </div>
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
-        <div class="text-3xl font-bold text-blue-600"><%= stats.in_progress %></div>
-        <div class="text-xs text-gray-500 mt-1 uppercase tracking-wide">In Progress</div>
-      </div>
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
-        <div class="text-3xl font-bold text-red-600"><%= stats.overdue %></div>
-        <div class="text-xs text-gray-500 mt-1 uppercase tracking-wide">Overdue</div>
-      </div>
-      <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center col-span-2 md:col-span-1">
-        <div class="text-3xl font-bold text-green-600"><%= stats.completion_rate %>%</div>
-        <div class="text-xs text-gray-500 mt-1 uppercase tracking-wide">Completion</div>
-      </div>
-    </div>
+      <% if (tasks.length === 0) { %>
+      <div class="px-4 py-8 text-center text-gray-400 text-sm">No tasks yet</div>
+      <% } else { %>
 
-    <!-- Filters -->
-    <form method="GET" action="/" class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-6">
-      <div class="flex flex-wrap gap-3 items-end">
-        <div>
-          <label class="block text-xs text-gray-500 mb-1 font-medium">Status</label>
-          <select name="status" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-            <option value="">All Statuses</option>
-            <option value="pending" <%- filters.status === 'pending' ? 'selected' : '' %>>Pending</option>
-            <option value="in_progress" <%- filters.status === 'in_progress' ? 'selected' : '' %>>In Progress</option>
-            <option value="overdue" <%- filters.status === 'overdue' ? 'selected' : '' %>>Overdue</option>
-            <option value="completed" <%- filters.status === 'completed' ? 'selected' : '' %>>Completed</option>
-          </select>
+      <%
+        // Separate active and completed
+        const activeTasks = tasks.filter(t => t.status !== 'completed');
+        const completedTasks = tasks.filter(t => t.status === 'completed');
+      %>
+
+      <% activeTasks.forEach((task, i) => { %>
+      <div class="task-row flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 last:border-0 group">
+        <!-- Done checkbox -->
+        <% if (task.status !== 'completed') { %>
+        <form method="POST" action="/tasks/<%= task.id %>/done" class="shrink-0">
+          <button type="submit" title="Mark done"
+            class="w-5 h-5 rounded-full border-2 border-gray-300 hover:border-green-500 hover:bg-green-50 flex items-center justify-center transition text-transparent hover:text-green-500 text-xs">✓</button>
+        </form>
+        <% } else { %>
+        <div class="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-xs shrink-0">✓</div>
+        <% } %>
+
+        <!-- Priority dot -->
+        <div class="w-2 h-2 rounded-full priority-dot-<%= task.priority %> shrink-0" title="<%= task.priority %>"></div>
+
+        <!-- Task content -->
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-800 truncate <%= task.status === 'completed' ? 'line-through text-gray-400' : '' %>"><%= task.title %></span>
+            <% if (task.status === 'overdue') { %>
+            <span class="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-medium">OVERDUE</span>
+            <% } %>
+          </div>
+          <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+            <% if (task.employee_name) { %>
+            <span class="text-[11px] text-gray-400">👤 <%= task.employee_name %></span>
+            <% } %>
+            <% if (task.due_date) { %>
+            <span class="text-[11px] text-gray-400">📅 <%= new Date(task.due_date).toLocaleDateString('en-IN', {day:'numeric',month:'short'}) %></span>
+            <% } %>
+            <% if (task.group_chat_name) { %>
+            <span class="text-[11px] text-gray-400 hidden sm:inline"><%= task.group_chat_name %></span>
+            <% } %>
+          </div>
         </div>
-        <div>
-          <label class="block text-xs text-gray-500 mb-1 font-medium">Employee</label>
-          <select name="employee" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-            <option value="">All Employees</option>
-            <% employees.forEach(e => { %>
-            <option value="<%= e.id %>" <%- filters.employee == e.id ? 'selected' : '' %>><%= e.name %></option>
-            <% }) %>
-          </select>
+
+        <!-- Actions (show on hover / always on mobile) -->
+        <div class="task-actions flex items-center gap-1 shrink-0">
+          <form method="POST" action="/tasks/<%= task.id %>/delete" class="inline"
+            onsubmit="return confirm('Delete this task?')">
+            <button type="submit" class="text-gray-300 hover:text-red-500 text-xs p-1 transition" title="Delete">🗑</button>
+          </form>
         </div>
-        <div>
-          <label class="block text-xs text-gray-500 mb-1 font-medium">From Date</label>
-          <input type="date" name="from" value="<%= filters.from || '' %>" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
-        </div>
-        <div>
-          <label class="block text-xs text-gray-500 mb-1 font-medium">To Date</label>
-          <input type="date" name="to" value="<%= filters.to || '' %>" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
-        </div>
-        <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition">Filter</button>
-        <a href="/" class="text-sm text-gray-500 hover:text-gray-700 py-2">Clear</a>
       </div>
-    </form>
+      <% }) %>
 
-    <!-- Tasks grouped by employee -->
-    <% if (Object.keys(tasksByEmployee).length === 0) { %>
-    <div class="bg-white rounded-xl p-12 text-center shadow-sm border border-gray-100">
-      <div class="text-5xl mb-3">✅</div>
-      <h3 class="text-lg font-semibold text-gray-700">No tasks found</h3>
-      <p class="text-gray-400 text-sm mt-1">Try adjusting your filters or add a task above</p>
-    </div>
-    <% } else { %>
-
-    <% Object.entries(tasksByEmployee).forEach(([groupName, groupTasks]) => { %>
-    <div class="mb-6">
-      <div class="flex items-center gap-2 mb-3">
-        <h2 class="text-base font-semibold text-gray-800">👤 <%= groupName %></h2>
-        <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full"><%= groupTasks.length %> task<%= groupTasks.length !== 1 ? 's' : '' %></span>
+      <% if (completedTasks.length > 0) { %>
+      <div class="px-4 py-2 bg-gray-50 border-t border-gray-200">
+        <button onclick="this.parentElement.nextElementSibling.classList.toggle('hidden'); this.querySelector('.arrow').textContent = this.parentElement.nextElementSibling.classList.contains('hidden') ? '▸' : '▾'"
+          class="text-xs text-gray-400 hover:text-gray-600 font-medium">
+          <span class="arrow">▸</span> Completed (<%= completedTasks.length %>)
+        </button>
       </div>
-
-      <div class="space-y-2">
-        <% groupTasks.forEach(task => { %>
-        <div class="bg-white rounded-lg p-4 shadow-sm border border-gray-100 priority-<%= task.priority %> hover:shadow-md transition">
-          <div class="flex items-start justify-between gap-3">
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="text-xs text-gray-400 font-mono">#<%= task.id %></span>
-                <span class="font-medium text-gray-800"><%= task.title %></span>
-              </div>
-              <% if (task.description) { %>
-              <p class="text-xs text-gray-500 mt-1 line-clamp-1"><%= task.description %></p>
-              <% } %>
-              <div class="flex items-center gap-3 mt-2 flex-wrap">
-                <span class="text-xs px-2 py-0.5 rounded-full badge-<%= task.status %> font-medium capitalize">
-                  <%= task.status.replace('_', ' ') %>
-                </span>
-                <% if (task.due_date) { %>
-                <span class="text-xs text-gray-500">
-                  📅 <%= new Date(task.due_date).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) %>
-                </span>
-                <% } %>
-                <% const priorityColor = {high:'text-red-500',medium:'text-yellow-500',low:'text-green-500'} %>
-                <span class="text-xs <%= priorityColor[task.priority] || 'text-gray-400' %> capitalize font-medium"><%= task.priority %></span>
-                <% if (task.group_chat_name) { %>
-                <span class="text-xs text-gray-400 hidden sm:inline">in <%= task.group_chat_name %></span>
-                <% } %>
-                <% if (task.reminder_count > 0) { %>
-                <span class="text-xs text-gray-400">🔔 <%= task.reminder_count %></span>
-                <% } %>
-              </div>
-            </div>
-            <!-- Actions -->
-            <div class="flex items-center gap-1.5 shrink-0">
-              <% if (task.status !== 'completed') { %>
-              <form method="POST" action="/tasks/<%= task.id %>/done" class="inline">
-                <button type="submit" title="Mark Done"
-                  class="text-xs bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 px-2.5 py-1.5 rounded-lg font-medium transition whitespace-nowrap">
-                  ✓ Done
-                </button>
-              </form>
-              <% } %>
-              <form method="POST" action="/tasks/<%= task.id %>/delete" class="inline"
-                onsubmit="return confirm('Delete task #<%= task.id %>: <%= task.title.replace(/'/g, '') %>?')">
-                <button type="submit" title="Delete"
-                  class="text-xs bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2.5 py-1.5 rounded-lg font-medium transition">
-                  🗑
-                </button>
-              </form>
-            </div>
+      <div class="hidden">
+        <% completedTasks.forEach(task => { %>
+        <div class="task-row flex items-center gap-3 px-4 py-2 border-b border-gray-100 last:border-0 opacity-60">
+          <div class="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-xs shrink-0">✓</div>
+          <div class="w-2 h-2 rounded-full bg-gray-300 shrink-0"></div>
+          <div class="flex-1 min-w-0">
+            <span class="text-sm text-gray-400 line-through truncate"><%= task.title %></span>
+            <% if (task.employee_name) { %>
+            <span class="text-[11px] text-gray-300 ml-2"><%= task.employee_name %></span>
+            <% } %>
+          </div>
+          <div class="task-actions shrink-0">
+            <form method="POST" action="/tasks/<%= task.id %>/delete" class="inline"
+              onsubmit="return confirm('Delete this task?')">
+              <button type="submit" class="text-gray-300 hover:text-red-500 text-xs p-1 transition">🗑</button>
+            </form>
           </div>
         </div>
         <% }) %>
       </div>
-    </div>
-    <% }) %>
+      <% } %>
 
-    <% } %>
+      <% } %>
 
-    <!-- Footer -->
-    <div class="mt-8 text-center text-xs text-gray-400">
-      TaskToChat &mdash; Task Tracker &mdash; <%= stats.total %> total tasks
+      <!-- Inline add task -->
+      <div class="border-t border-gray-100">
+        <button onclick="this.style.display='none'; document.querySelector('.add-form').classList.add('active')"
+          class="w-full text-left px-4 py-2.5 text-sm text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition">
+          + Add task...
+        </button>
+        <form method="POST" action="/tasks/create" class="add-form flex-col gap-2 px-4 py-3">
+          <div class="flex items-center gap-2">
+            <input type="text" name="title" required placeholder="Task title" autofocus
+              class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent" />
+            <button type="submit"
+              class="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-900 transition whitespace-nowrap">Add</button>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <select name="assigned_to" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
+              <option value="">👤 Unassigned</option>
+              <% employees.forEach(e => { %>
+              <option value="<%= e.id %>"><%= e.name %></option>
+              <% }) %>
+            </select>
+            <select name="priority" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
+              <option value="medium">🟡 Medium</option>
+              <option value="high">🔴 High</option>
+              <option value="low">🟢 Low</option>
+            </select>
+            <input type="date" name="due_date" class="text-xs border border-gray-200 rounded-md px-2 py-1.5" />
+            <select name="group_chat_id" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
+              <option value="">💬 No group</option>
+              <% groupChats.forEach(gc => { %>
+              <option value="<%= gc.group_chat_id %>"><%= gc.group_chat_name %></option>
+              <% }) %>
+            </select>
+            <input type="text" name="description" placeholder="Description (optional)" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 flex-1 min-w-[120px]" />
+          </div>
+        </form>
+      </div>
+
     </div>
+
+    <div class="text-center text-[11px] text-gray-300 mt-4 mb-6">TaskToChat</div>
   </div>
 
 </body>
