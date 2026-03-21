@@ -16,25 +16,22 @@
     .priority-dot-high { background: #ef4444; }
     .priority-dot-medium { background: #f59e0b; }
     .priority-dot-low { background: #22c55e; }
-    .add-form { display: none; }
-    .add-form.active { display: flex; }
+    .section-add { display: none; }
+    .section-add.active { display: flex; }
     .filter-bar { display: none; }
     .filter-bar.active { display: flex; }
   </style>
 </head>
 <body class="bg-[#fafafa] min-h-screen">
 
-  <!-- Minimal header -->
   <div class="max-w-3xl mx-auto px-4 pt-6 pb-2">
     <div class="flex items-center justify-between mb-1">
       <h1 class="text-lg font-bold text-gray-900 tracking-tight">📋 TaskToChat</h1>
-      <div class="flex items-center gap-2">
-        <button onclick="document.querySelector('.filter-bar').classList.toggle('active')"
-          class="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded transition">⚙ Filter</button>
-      </div>
+      <button onclick="document.querySelector('.filter-bar').classList.toggle('active')"
+        class="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded transition">⚙ Filter</button>
     </div>
 
-    <!-- Quick stats inline -->
+    <!-- Quick stats -->
     <div class="flex items-center gap-4 text-xs text-gray-400 mb-4">
       <span><strong class="text-gray-700"><%= stats.pending + stats.in_progress + stats.overdue %></strong> open</span>
       <% if (stats.overdue > 0) { %><span class="text-red-500"><strong><%= stats.overdue %></strong> overdue</span><% } %>
@@ -64,106 +61,150 @@
     </form>
   </div>
 
-  <!-- Task list -->
-  <div class="max-w-3xl mx-auto px-4">
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div class="max-w-3xl mx-auto px-4 pb-6">
 
-      <% if (tasks.length === 0) { %>
-      <div class="px-4 py-8 text-center text-gray-400 text-sm">No tasks yet</div>
-      <% } else { %>
+    <% if (tasks.length === 0) { %>
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-8 text-center text-gray-400 text-sm">No tasks yet</div>
+    <% } else { %>
 
-      <%
-        // Separate active and completed
-        const activeTasks = tasks.filter(t => t.status !== 'completed');
-        const completedTasks = tasks.filter(t => t.status === 'completed');
-      %>
+    <%
+      // Group active tasks by employee or group chat
+      const activeTasks = tasks.filter(t => t.status !== 'completed');
+      const completedTasks = tasks.filter(t => t.status === 'completed');
 
-      <% activeTasks.forEach((task, i) => { %>
-      <div class="task-row flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 last:border-0 group">
-        <!-- Done checkbox -->
-        <% if (task.status !== 'completed') { %>
-        <form method="POST" action="/tasks/<%= task.id %>/done" class="shrink-0">
-          <button type="submit" title="Mark done"
-            class="w-5 h-5 rounded-full border-2 border-gray-300 hover:border-green-500 hover:bg-green-50 flex items-center justify-center transition text-transparent hover:text-green-500 text-xs">✓</button>
-        </form>
-        <% } else { %>
-        <div class="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-xs shrink-0">✓</div>
-        <% } %>
+      // Build sections: { key, label, icon, tasks[], employeeId?, groupChatId?, groupChatName? }
+      const sections = [];
+      const byEmployee = {};
+      const unassignedByGroup = {};
+      const unassignedNoGroup = [];
 
-        <!-- Priority dot -->
-        <div class="w-2 h-2 rounded-full priority-dot-<%= task.priority %> shrink-0" title="<%= task.priority %>"></div>
+      for (const t of activeTasks) {
+        if (t.employee_name) {
+          if (!byEmployee[t.employee_name]) byEmployee[t.employee_name] = { tasks: [], employeeId: t.assigned_to };
+          byEmployee[t.employee_name].tasks.push(t);
+        } else if (t.group_chat_name) {
+          if (!unassignedByGroup[t.group_chat_name]) unassignedByGroup[t.group_chat_name] = { tasks: [], groupChatId: t.group_chat_id };
+          unassignedByGroup[t.group_chat_name].tasks.push(t);
+        } else {
+          unassignedNoGroup.push(t);
+        }
+      }
 
-        <!-- Task content -->
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-800 truncate <%= task.status === 'completed' ? 'line-through text-gray-400' : '' %>"><%= task.title %></span>
-            <% if (task.status === 'overdue') { %>
-            <span class="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-medium">OVERDUE</span>
-            <% } %>
-          </div>
-          <div class="flex items-center gap-2 mt-0.5 flex-wrap">
-            <% if (task.employee_name) { %>
-            <span class="text-[11px] text-gray-400">👤 <%= task.employee_name %></span>
-            <% } %>
-            <% if (task.due_date) { %>
-            <span class="text-[11px] text-gray-400">📅 <%= new Date(task.due_date).toLocaleDateString('en-IN', {day:'numeric',month:'short'}) %></span>
-            <% } %>
-            <% if (task.group_chat_name) { %>
-            <span class="text-[11px] text-gray-400 hidden sm:inline"><%= task.group_chat_name %></span>
-            <% } %>
-          </div>
-        </div>
+      for (const [name, data] of Object.entries(byEmployee)) {
+        sections.push({ key: 'emp-' + data.employeeId, label: name, icon: '👤', tasks: data.tasks, employeeId: data.employeeId, groupChatId: null, groupChatName: null });
+      }
+      for (const [name, data] of Object.entries(unassignedByGroup)) {
+        sections.push({ key: 'grp-' + data.groupChatId, label: name, icon: '💬', tasks: data.tasks, employeeId: null, groupChatId: data.groupChatId, groupChatName: name });
+      }
+      if (unassignedNoGroup.length > 0) {
+        sections.push({ key: 'unassigned', label: 'Unassigned', icon: '📌', tasks: unassignedNoGroup, employeeId: null, groupChatId: null, groupChatName: null });
+      }
+    %>
 
-        <!-- Actions (show on hover / always on mobile) -->
-        <div class="task-actions flex items-center gap-1 shrink-0">
-          <form method="POST" action="/tasks/<%= task.id %>/delete" class="inline"
-            onsubmit="return confirm('Delete this task?')">
-            <button type="submit" class="text-gray-300 hover:text-red-500 text-xs p-1 transition" title="Delete">🗑</button>
+    <% sections.forEach(section => { %>
+    <div class="mb-4">
+      <!-- Section header -->
+      <div class="flex items-center gap-2 mb-1 px-1">
+        <span class="text-sm"><%= section.icon %></span>
+        <span class="text-sm font-semibold text-gray-700"><%= section.label %></span>
+        <span class="text-[11px] text-gray-400"><%= section.tasks.length %></span>
+      </div>
+
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <% section.tasks.forEach(task => { %>
+        <div class="task-row flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 last:border-0">
+          <!-- Done checkbox -->
+          <form method="POST" action="/tasks/<%= task.id %>/done" class="shrink-0">
+            <button type="submit" title="Mark done"
+              class="w-5 h-5 rounded-full border-2 border-gray-300 hover:border-green-500 hover:bg-green-50 flex items-center justify-center transition text-transparent hover:text-green-500 text-xs">✓</button>
           </form>
-        </div>
-      </div>
-      <% }) %>
 
-      <% if (completedTasks.length > 0) { %>
-      <div class="px-4 py-2 bg-gray-50 border-t border-gray-200">
-        <button onclick="this.parentElement.nextElementSibling.classList.toggle('hidden'); this.querySelector('.arrow').textContent = this.parentElement.nextElementSibling.classList.contains('hidden') ? '▸' : '▾'"
-          class="text-xs text-gray-400 hover:text-gray-600 font-medium">
-          <span class="arrow">▸</span> Completed (<%= completedTasks.length %>)
-        </button>
-      </div>
-      <div class="hidden">
-        <% completedTasks.forEach(task => { %>
-        <div class="task-row flex items-center gap-3 px-4 py-2 border-b border-gray-100 last:border-0 opacity-60">
-          <div class="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-xs shrink-0">✓</div>
-          <div class="w-2 h-2 rounded-full bg-gray-300 shrink-0"></div>
+          <!-- Priority dot -->
+          <div class="w-2 h-2 rounded-full priority-dot-<%= task.priority %> shrink-0" title="<%= task.priority %>"></div>
+
+          <!-- Task content -->
           <div class="flex-1 min-w-0">
-            <span class="text-sm text-gray-400 line-through truncate"><%= task.title %></span>
-            <% if (task.employee_name) { %>
-            <span class="text-[11px] text-gray-300 ml-2"><%= task.employee_name %></span>
-            <% } %>
+            <span class="text-sm text-gray-800 truncate block"><%= task.title %></span>
+            <div class="flex items-center gap-2 mt-0.5">
+              <% if (task.due_date) { %>
+              <span class="text-[11px] text-gray-400">📅 <%= new Date(task.due_date).toLocaleDateString('en-IN', {day:'numeric',month:'short'}) %></span>
+              <% } %>
+              <% if (task.status === 'overdue') { %>
+              <span class="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-medium">OVERDUE</span>
+              <% } %>
+            </div>
           </div>
-          <div class="task-actions shrink-0">
+
+          <!-- Actions -->
+          <div class="task-actions flex items-center gap-1 shrink-0">
             <form method="POST" action="/tasks/<%= task.id %>/delete" class="inline"
               onsubmit="return confirm('Delete this task?')">
-              <button type="submit" class="text-gray-300 hover:text-red-500 text-xs p-1 transition">🗑</button>
+              <button type="submit" class="text-gray-300 hover:text-red-500 text-xs p-1 transition" title="Delete">🗑</button>
             </form>
           </div>
         </div>
         <% }) %>
+
+        <!-- Inline add for this section -->
+        <div class="border-t border-gray-100">
+          <button onclick="this.style.display='none'; this.nextElementSibling.classList.add('active'); this.nextElementSibling.querySelector('input[name=title]').focus();"
+            class="w-full text-left px-4 py-2 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition">
+            + Add task...
+          </button>
+          <form method="POST" action="/tasks/create" class="section-add flex-col gap-2 px-4 py-3">
+            <% if (section.employeeId) { %>
+            <input type="hidden" name="assigned_to" value="<%= section.employeeId %>" />
+            <% } %>
+            <% if (section.groupChatId) { %>
+            <input type="hidden" name="group_chat_id" value="<%= section.groupChatId %>" />
+            <% } %>
+            <div class="flex items-center gap-2">
+              <input type="text" name="title" required placeholder="Task title"
+                class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent" />
+              <button type="submit"
+                class="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-900 transition whitespace-nowrap">Add</button>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <% if (!section.employeeId) { %>
+              <select name="assigned_to" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
+                <option value="">👤 Unassigned</option>
+                <% employees.forEach(e => { %>
+                <option value="<%= e.id %>"><%= e.name %></option>
+                <% }) %>
+              </select>
+              <% } %>
+              <select name="priority" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
+                <option value="medium">🟡 Medium</option>
+                <option value="high">🔴 High</option>
+                <option value="low">🟢 Low</option>
+              </select>
+              <input type="date" name="due_date" class="text-xs border border-gray-200 rounded-md px-2 py-1.5" />
+              <% if (!section.groupChatId) { %>
+              <select name="group_chat_id" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white">
+                <option value="">💬 No group</option>
+                <% groupChats.forEach(gc => { %>
+                <option value="<%= gc.group_chat_id %>"><%= gc.group_chat_name %></option>
+                <% }) %>
+              </select>
+              <% } %>
+              <input type="text" name="description" placeholder="Description (optional)" class="text-xs border border-gray-200 rounded-md px-2 py-1.5 flex-1 min-w-[120px]" />
+            </div>
+          </form>
+        </div>
       </div>
-      <% } %>
+    </div>
+    <% }) %>
 
-      <% } %>
-
-      <!-- Inline add task -->
-      <div class="border-t border-gray-100">
-        <button onclick="this.style.display='none'; document.querySelector('.add-form').classList.add('active')"
+    <!-- General add task (always visible at bottom) -->
+    <div class="mb-4">
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <button onclick="this.style.display='none'; this.nextElementSibling.classList.add('active'); this.nextElementSibling.querySelector('input[name=title]').focus();"
           class="w-full text-left px-4 py-2.5 text-sm text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition">
-          + Add task...
+          + Add new task...
         </button>
-        <form method="POST" action="/tasks/create" class="add-form flex-col gap-2 px-4 py-3">
+        <form method="POST" action="/tasks/create" class="section-add flex-col gap-2 px-4 py-3">
           <div class="flex items-center gap-2">
-            <input type="text" name="title" required placeholder="Task title" autofocus
+            <input type="text" name="title" required placeholder="Task title"
               class="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent" />
             <button type="submit"
               class="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-900 transition whitespace-nowrap">Add</button>
@@ -191,8 +232,39 @@
           </div>
         </form>
       </div>
-
     </div>
+
+    <!-- Completed (collapsed) -->
+    <% if (completedTasks.length > 0) { %>
+    <div class="mb-4">
+      <button onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.arrow').textContent = this.nextElementSibling.classList.contains('hidden') ? '▸' : '▾'"
+        class="text-xs text-gray-400 hover:text-gray-600 font-medium mb-1 px-1">
+        <span class="arrow">▸</span> Completed (<%= completedTasks.length %>)
+      </button>
+      <div class="hidden bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <% completedTasks.forEach(task => { %>
+        <div class="task-row flex items-center gap-3 px-4 py-2 border-b border-gray-100 last:border-0 opacity-50">
+          <div class="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-xs shrink-0">✓</div>
+          <div class="w-2 h-2 rounded-full bg-gray-300 shrink-0"></div>
+          <div class="flex-1 min-w-0">
+            <span class="text-sm text-gray-400 line-through truncate block"><%= task.title %></span>
+            <% if (task.employee_name) { %>
+            <span class="text-[11px] text-gray-300"><%= task.employee_name %></span>
+            <% } %>
+          </div>
+          <div class="task-actions shrink-0">
+            <form method="POST" action="/tasks/<%= task.id %>/delete" class="inline"
+              onsubmit="return confirm('Delete this task?')">
+              <button type="submit" class="text-gray-300 hover:text-red-500 text-xs p-1 transition">🗑</button>
+            </form>
+          </div>
+        </div>
+        <% }) %>
+      </div>
+    </div>
+    <% } %>
+
+    <% } %>
 
     <div class="text-center text-[11px] text-gray-300 mt-4 mb-6">TaskToChat</div>
   </div>
