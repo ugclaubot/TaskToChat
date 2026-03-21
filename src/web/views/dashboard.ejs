@@ -262,36 +262,83 @@
           class="w-full text-left px-4 py-3 text-[13px] text-muted hover:text-zinc-600 hover:bg-zinc-50/50 transition cursor-text">
           + Add new task…
         </button>
-        <form method="POST" action="/tasks/create" id="add-general" class="add-row flex-col gap-2 px-4 py-3">
+        <form method="POST" action="/tasks/create" id="add-general" class="add-row flex-col gap-3 px-4 py-3">
           <div class="flex items-center gap-2">
             <input type="text" name="title" required placeholder="What needs to be done?"
               class="flex-1 text-[13px] border border-subtle rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-zinc-200 focus:border-zinc-300 placeholder:text-zinc-300" />
             <button type="submit"
               class="bg-accent text-white px-4 py-2 rounded-xl text-[13px] font-medium hover:bg-zinc-800 transition whitespace-nowrap">Add</button>
           </div>
-          <div class="flex items-center gap-2 flex-wrap">
-            <select name="assigned_to" class="text-[11px] border border-subtle rounded-lg px-2 py-1.5 bg-surface text-zinc-500">
-              <option value="">Unassigned</option>
+
+          <!-- Assign to: searchable list of people + groups -->
+          <div class="relative" id="assign-picker">
+            <input type="text" id="assign-search" autocomplete="off" placeholder="🔍 Assign to person or group…"
+              class="w-full text-[12px] border border-subtle rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-zinc-200 focus:border-zinc-300 placeholder:text-zinc-400"
+              onfocus="document.getElementById('assign-list').classList.remove('hidden')"
+              oninput="filterAssignees(this.value)" />
+            <input type="hidden" name="assigned_to" id="assign-emp-val" />
+            <input type="hidden" name="group_chat_id" id="assign-grp-val" />
+            <div id="assign-list" class="hidden absolute z-20 mt-1 w-full bg-surface border border-subtle rounded-xl shadow-lg max-h-48 overflow-y-auto">
               <% employees.forEach(e => { %>
-              <option value="<%= e.id %>"><%= e.name %></option>
+              <div class="assign-opt px-3 py-2 text-[12px] text-zinc-700 hover:bg-zinc-50 cursor-pointer flex items-center gap-2 border-b border-zinc-50"
+                data-type="employee" data-id="<%= e.id %>" data-name="<%= e.name %>"
+                onclick="selectAssignee('employee', '<%= e.id %>', '', '<%= e.name %>')">
+                <span class="text-zinc-400">👤</span> <%= e.name %>
+                <% if (e.telegram_username) { %><span class="text-zinc-300 text-[11px]">@<%= e.telegram_username %></span><% } %>
+              </div>
               <% }) %>
-            </select>
+              <% groupChats.forEach(gc => { %>
+              <div class="assign-opt px-3 py-2 text-[12px] text-zinc-700 hover:bg-zinc-50 cursor-pointer flex items-center gap-2 border-b border-zinc-50"
+                data-type="group" data-id="<%= gc.group_chat_id %>" data-name="<%= gc.group_chat_name %>"
+                onclick="selectAssignee('group', '', '<%= gc.group_chat_id %>', `<%= gc.group_chat_name.replace(/`/g, '') %>`)">
+                <span class="text-zinc-400">💬</span> <%= gc.group_chat_name %>
+              </div>
+              <% }) %>
+              <div class="assign-opt px-3 py-2 text-[12px] text-zinc-400 hover:bg-zinc-50 cursor-pointer flex items-center gap-2"
+                data-type="none" data-name="unassigned"
+                onclick="selectAssignee('none', '', '', 'Unassigned')">
+                <span>📌</span> Unassigned
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 flex-wrap">
             <select name="priority" class="text-[11px] border border-subtle rounded-lg px-2 py-1.5 bg-surface text-zinc-500">
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="low">Low</option>
+              <option value="medium">🟡 Medium</option>
+              <option value="high">🔴 High</option>
+              <option value="low">🟢 Low</option>
             </select>
             <input type="date" name="due_date" class="text-[11px] border border-subtle rounded-lg px-2 py-1.5 text-zinc-500" />
-            <select name="group_chat_id" class="text-[11px] border border-subtle rounded-lg px-2 py-1.5 bg-surface text-zinc-500">
-              <option value="">No group</option>
-              <% groupChats.forEach(gc => { %>
-              <option value="<%= gc.group_chat_id %>"><%= gc.group_chat_name %></option>
-              <% }) %>
-            </select>
           </div>
         </form>
       </div>
     </div>
+
+    <script>
+      function filterAssignees(query) {
+        const q = query.toLowerCase();
+        document.querySelectorAll('.assign-opt').forEach(el => {
+          const name = (el.dataset.name || '').toLowerCase();
+          el.style.display = name.includes(q) ? '' : 'none';
+        });
+        document.getElementById('assign-list').classList.remove('hidden');
+      }
+
+      function selectAssignee(type, empId, grpId, name) {
+        document.getElementById('assign-search').value = name;
+        document.getElementById('assign-emp-val').value = empId;
+        document.getElementById('assign-grp-val').value = grpId;
+        document.getElementById('assign-list').classList.add('hidden');
+      }
+
+      // Close dropdown when clicking outside
+      document.addEventListener('click', function(e) {
+        const picker = document.getElementById('assign-picker');
+        if (picker && !picker.contains(e.target)) {
+          document.getElementById('assign-list').classList.add('hidden');
+        }
+      });
+    </script>
 
     <!-- Completed -->
     <% if (completedTasks.length > 0) { %>

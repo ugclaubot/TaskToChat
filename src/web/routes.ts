@@ -107,6 +107,20 @@ router.post('/tasks/:id/delete', (req: Request, res: Response) => {
   res.redirect('/');
 });
 
+// Build inline keyboard buttons for tasks (numbered, two per row)
+function buildTaskButtons(tasks: { id: number }[]): { text: string; callback_data: string }[][] {
+  const buttons: { text: string; callback_data: string }[][] = [];
+  for (let i = 0; i < tasks.length; i += 2) {
+    const row: { text: string; callback_data: string }[] = [];
+    row.push({ text: `☑️ ${i + 1}`, callback_data: `toggle_task_${tasks[i].id}` });
+    if (i + 1 < tasks.length) {
+      row.push({ text: `☑️ ${i + 2}`, callback_data: `toggle_task_${tasks[i + 1].id}` });
+    }
+    buttons.push(row);
+  }
+  return buttons;
+}
+
 // Send pending task list to a person (DM) or group (group chat) via Telegram
 router.post('/tasks/send-telegram', async (req: Request, res: Response) => {
   if (!botInstance) {
@@ -132,13 +146,14 @@ router.post('/tasks/send-telegram', async (req: Request, res: Response) => {
         const overdue = t.status === 'overdue' ? ' ⚠️' : '';
         lines.push(`${i + 1}. ${t.title}${due}${overdue}`);
       });
-      await botInstance.telegram.sendMessage(employee.telegram_user_id, lines.join('\n'), { parse_mode: 'Markdown' });
+      const buttons = buildTaskButtons(tasks);
+      await botInstance.telegram.sendMessage(employee.telegram_user_id, lines.join('\n'), {
+        parse_mode: 'Markdown',
+        reply_markup: buttons.length > 0 ? { inline_keyboard: buttons } : undefined,
+      } as any);
       return res.redirect('/?msg=Sent+to+' + encodeURIComponent(employee.name));
 
     } else if (type === 'group' && group_chat_id) {
-      const groups = getUnassignedPendingTasksByGroup();
-      const group = groups[group_chat_id];
-      // Also get all tasks for this group chat (assigned + unassigned)
       const allTasks = getAllTasksWithEmployees().filter(
         t => t.group_chat_id === group_chat_id && t.status !== 'completed'
       );
@@ -153,7 +168,11 @@ router.post('/tasks/send-telegram', async (req: Request, res: Response) => {
         const assignee = t.employee_name ? ` → ${t.employee_name}` : '';
         lines.push(`${i + 1}. ${t.title}${assignee}${due}${overdue}`);
       });
-      await botInstance.telegram.sendMessage(group_chat_id, lines.join('\n'), { parse_mode: 'Markdown' });
+      const buttons = buildTaskButtons(allTasks);
+      await botInstance.telegram.sendMessage(group_chat_id, lines.join('\n'), {
+        parse_mode: 'Markdown',
+        reply_markup: buttons.length > 0 ? { inline_keyboard: buttons } : undefined,
+      } as any);
       return res.redirect('/?msg=Sent+to+' + encodeURIComponent(groupName));
     }
 
