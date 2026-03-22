@@ -7,17 +7,38 @@ import { morningEmployeeMessage, eveningEmployeeMessage, managerMorningSummary, 
 import { config } from '../config';
 
 /**
+ * Build compact checkbox inline keyboard buttons for tasks (2 per row).
+ */
+function buildTaskButtons(tasks: TaskWithEmployee[]): { text: string; callback_data: string }[][] {
+  const buttons: { text: string; callback_data: string }[][] = [];
+  for (let i = 0; i < tasks.length; i += 2) {
+    const row: { text: string; callback_data: string }[] = [];
+    row.push({ text: `☑️ ${i + 1}`, callback_data: `toggle_task_${tasks[i].id}` });
+    if (i + 1 < tasks.length) {
+      row.push({ text: `☑️ ${i + 2}`, callback_data: `toggle_task_${tasks[i + 1].id}` });
+    }
+    buttons.push(row);
+  }
+  return buttons;
+}
+
+/**
  * Send reminder to an employee via Telegram DM (preferred) or WhatsApp (fallback).
+ * When sending via Telegram, includes inline checkbox buttons for task completion.
  */
 async function sendReminder(
   bot: Telegraf,
   employee: { name: string; telegram_user_id: string | null; whatsapp_number: string | null },
-  message: string
+  message: string,
+  buttons?: { text: string; callback_data: string }[][]
 ): Promise<boolean> {
   // Try Telegram DM first
   if (employee.telegram_user_id) {
     try {
-      await bot.telegram.sendMessage(employee.telegram_user_id, message);
+      await bot.telegram.sendMessage(employee.telegram_user_id, message, {
+        parse_mode: 'Markdown',
+        ...(buttons && buttons.length > 0 ? { reply_markup: { inline_keyboard: buttons } } : {}),
+      });
       return true;
     } catch (err: unknown) {
       // User may not have started the bot — fall through to WhatsApp
@@ -51,7 +72,8 @@ async function runMorningReminders(bot: Telegraf): Promise<void> {
     tasksByEmployee[employee.id] = { employee: employee.name, tasks };
 
     const msg = morningEmployeeMessage(employee.name, tasks);
-    const sent = await sendReminder(bot, employee as any, msg);
+    const buttons = buildTaskButtons(tasks);
+    const sent = await sendReminder(bot, employee as any, msg, buttons);
     if (sent) {
       for (const task of tasks) {
         incrementReminderCount(task.id);
@@ -67,7 +89,11 @@ async function runMorningReminders(bot: Telegraf): Promise<void> {
   for (const [groupChatId, group] of Object.entries(unassignedGroups)) {
     try {
       const msg = groupMorningMessage(group.groupChatName, group.tasks);
-      await bot.telegram.sendMessage(groupChatId, msg);
+      const groupButtons = buildTaskButtons(group.tasks);
+      await bot.telegram.sendMessage(groupChatId, msg, {
+        parse_mode: 'Markdown',
+        ...(groupButtons.length > 0 ? { reply_markup: { inline_keyboard: groupButtons } } : {}),
+      });
       for (const task of group.tasks) {
         incrementReminderCount(task.id);
       }
@@ -103,7 +129,8 @@ async function runEveningReminders(bot: Telegraf): Promise<void> {
     if (tasks.length === 0) continue;
 
     const msg = eveningEmployeeMessage(employee.name, tasks);
-    const sent = await sendReminder(bot, employee as any, msg);
+    const buttons = buildTaskButtons(tasks);
+    const sent = await sendReminder(bot, employee as any, msg, buttons);
     if (sent) {
       for (const task of tasks) {
         incrementReminderCount(task.id);
@@ -119,7 +146,11 @@ async function runEveningReminders(bot: Telegraf): Promise<void> {
   for (const [groupChatId, group] of Object.entries(unassignedGroups)) {
     try {
       const msg = groupEveningMessage(group.groupChatName, group.tasks);
-      await bot.telegram.sendMessage(groupChatId, msg);
+      const groupButtons = buildTaskButtons(group.tasks);
+      await bot.telegram.sendMessage(groupChatId, msg, {
+        parse_mode: 'Markdown',
+        ...(groupButtons.length > 0 ? { reply_markup: { inline_keyboard: groupButtons } } : {}),
+      });
       for (const task of group.tasks) {
         incrementReminderCount(task.id);
       }
