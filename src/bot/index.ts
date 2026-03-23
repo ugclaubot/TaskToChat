@@ -15,9 +15,9 @@ function formatTaskAge(createdAt?: string): string {
   const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
   const dateLabel = created.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
-  if (days === 0) return `[created today]`;
-  if (days === 1) return `[created ${dateLabel} · 1d ago]`;
-  return `[created ${dateLabel} · ${days}d ago]`;
+  if (days === 0) return `created today`;
+  if (days === 1) return `created ${dateLabel} · 1d ago`;
+  return `created ${dateLabel} · ${days}d ago`;
 }
 
 function formatNextDue(dateStr: string): string {
@@ -73,12 +73,15 @@ export function createBot(): Telegraf {
 
         let idx = 1;
         for (const t of tasks) {
-          const duePart = t.due_date ? ` (${formatDueDate(new Date(t.due_date))}) ` : '';
           const age = formatTaskAge(t.created_at);
+          const bracketParts: string[] = [];
+          if (t.due_date) bracketParts.push(formatDueDate(new Date(t.due_date)));
+          if (age) bracketParts.push(age);
+          const bracket = bracketParts.length > 0 ? ` [${bracketParts.join(', ')}]` : '';
           if (t.status === 'completed') {
-            lines.push(`${idx}. ✅ ~${t.title}~${duePart}${age ? ` ${age}` : ''}`);
+            lines.push(`${idx}. ✅ ~${t.title}~.${bracket}`);
           } else {
-            lines.push(`${idx}. _${t.title}_${duePart}${age ? ` ${age}` : ''}`);
+            lines.push(`${idx}. ${t.title}.${bracket}`);
           }
           idx++;
         }
@@ -157,12 +160,15 @@ export function createBot(): Telegraf {
         let idx = 1;
 
         for (const t of tasks) {
-          const duePart = t.due_date ? ` (${formatDueDate(new Date(t.due_date))}) ` : '';
           const age = formatTaskAge(t.created_at);
+          const bracketParts: string[] = [];
+          if (t.due_date) bracketParts.push(formatDueDate(new Date(t.due_date)));
+          if (age) bracketParts.push(age);
+          const bracket = bracketParts.length > 0 ? ` [${bracketParts.join(', ')}]` : '';
           if (t.status === 'completed') {
-            lines.push(`${idx}. ✅ ~${t.title}~${duePart}${age ? ` ${age}` : ''}`);
+            lines.push(`${idx}. ✅ ~${t.title}~.${bracket}`);
           } else {
-            lines.push(`${idx}. _${t.title}_${duePart}${age ? ` ${age}` : ''}`);
+            lines.push(`${idx}. ${t.title}.${bracket}`);
           }
           idx++;
         }
@@ -298,14 +304,17 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
     dueDate: parsed.dueDate?.toISOString().split('T')[0] ?? undefined,
   });
 
-  const dueLine = parsed.dueDate ? ` (${formatDueDate(parsed.dueDate)})` : '';
   const assignedLine = employee
     ? `👤 *${employee.name}*`
     : `👥 *Group*`;
   const age = formatTaskAge(task.created_at);
+  const bracketParts: string[] = [];
+  if (parsed.dueDate) bracketParts.push(formatDueDate(parsed.dueDate));
+  if (age) bracketParts.push(age);
+  const bracket = bracketParts.length > 0 ? ` [${bracketParts.join(', ')}]` : '';
 
   await ctx.reply(
-    `${assignedLine}\n\n1. _${task.title}_${dueLine}${age ? ` ${age}` : ''}`,
+    `${assignedLine}\n\n1. ${task.title}.${bracket}`,
     {
       parse_mode: 'Markdown',
       reply_to_message_id: ctx.message.message_id,
@@ -353,8 +362,10 @@ async function handleMultiTaskCreation(ctx: Context & { message: { text: string;
     : `👥 *Group tasks*`;
 
   const taskLines = createdTaskIds.map((id, i) => {
-    const duePart = parsedTasks[i].dueDate ? ` (${formatDueDate(parsedTasks[i].dueDate!)})` : '';
-    return `${i + 1}. _${parsedTasks[i].title}_${duePart} [created today]`;
+    const bracketParts: string[] = [];
+    if (parsedTasks[i].dueDate) bracketParts.push(formatDueDate(parsedTasks[i].dueDate!));
+    bracketParts.push('created today');
+    return `${i + 1}. ${parsedTasks[i].title}. [${bracketParts.join(', ')}]`;
   });
 
   const buttons: { text: string; callback_data: string }[][] = [];
