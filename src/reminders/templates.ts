@@ -1,32 +1,51 @@
 import { TaskWithEmployee } from '../models/task';
 import { formatDueDate } from '../bot/taskParser';
 
+/**
+ * Calculate human-readable time elapsed since a given date.
+ */
+function timeElapsed(dateStr: string): string {
+  const then = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - then.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffDays > 0) return `${diffDays}d ago`;
+  if (diffHours > 0) return `${diffHours}h ago`;
+  if (diffMins > 0) return `${diffMins}m ago`;
+  return 'just now';
+}
+
+/**
+ * Format a task line with date + time elapsed in italic brackets.
+ */
+function formatTaskLine(index: number, task: TaskWithEmployee): string {
+  const dateStr = task.due_date
+    ? formatDueDate(new Date(task.due_date))
+    : formatDueDate(new Date(task.created_at));
+  const elapsed = timeElapsed(task.due_date || task.created_at);
+  return `${index}. ${task.title} _(${dateStr}, ${elapsed})_`;
+}
+
 export function morningEmployeeMessage(employeeName: string, tasks: TaskWithEmployee[]): string {
   if (tasks.length === 0) {
     return `Good morning, ${employeeName}! 🌅\n\nYou have no pending tasks today. Great work staying on top of things!`;
   }
 
-  const overdue = tasks.filter((t) => t.status === 'overdue');
-  const pending = tasks.filter((t) => t.status !== 'overdue');
-
   const lines: string[] = [
-    `📋 Good morning, ${employeeName}! Here are your pending tasks:\n`,
+    `*Morning Reminder* ☀️\n`,
   ];
 
   let index = 1;
-  for (const task of [...overdue, ...pending]) {
-    const isOverdue = task.status === 'overdue';
-    const dueStr = task.due_date
-      ? ` (Due: ${formatDueDate(new Date(task.due_date))})`
-      : '';
-    const overdueTag = isOverdue ? '[OVERDUE ⚠️] ' : '';
-    lines.push(`${index}. ${overdueTag}${task.title}${dueStr}`);
+  for (const task of tasks) {
+    lines.push(formatTaskLine(index, task));
     index++;
   }
 
   lines.push('');
-  lines.push(`Total: ${tasks.length} pending${overdue.length > 0 ? `, ${overdue.length} overdue` : ''}`);
-  lines.push('\nHave a productive day! 💪');
+  lines.push(`_Total: ${tasks.length} pending_`);
 
   return lines.join('\n');
 }
@@ -36,80 +55,52 @@ export function eveningEmployeeMessage(employeeName: string, tasks: TaskWithEmpl
     return `Good evening, ${employeeName}! 🌆\n\nAll tasks are complete! Enjoy your evening. 🎉`;
   }
 
-  const overdue = tasks.filter((t) => t.status === 'overdue');
-  const pending = tasks.filter((t) => t.status !== 'overdue');
-
   const lines: string[] = [
-    `🌆 Good evening, ${employeeName}! End-of-day task check:\n`,
+    `*Evening Reminder* 🌆\n`,
   ];
 
   let index = 1;
-  for (const task of [...overdue, ...pending]) {
-    const isOverdue = task.status === 'overdue';
-    const dueStr = task.due_date
-      ? ` (Due: ${formatDueDate(new Date(task.due_date))})`
-      : '';
-    const overdueTag = isOverdue ? '[OVERDUE ⚠️] ' : '';
-    lines.push(`${index}. ${overdueTag}${task.title}${dueStr}`);
+  for (const task of tasks) {
+    lines.push(formatTaskLine(index, task));
     index++;
   }
 
   lines.push('');
-  if (overdue.length > 0) {
-    lines.push(`⚠️ Warning: ${overdue.length} overdue task${overdue.length > 1 ? 's' : ''}. Please prioritize tomorrow!`);
-  }
-  lines.push(`Total: ${tasks.length} still pending`);
-  lines.push('\nHave a restful evening! 🌙');
+  lines.push(`_Total: ${tasks.length} pending_`);
 
   return lines.join('\n');
 }
 
 export function groupMorningMessage(groupName: string, tasks: TaskWithEmployee[]): string {
-  const overdue = tasks.filter((t) => t.status === 'overdue');
-  const pending = tasks.filter((t) => t.status !== 'overdue');
-
   const lines: string[] = [
-    `📋 Good morning! Pending tasks in ${groupName}:\n`,
+    `*Morning Reminder* ☀️\n`,
   ];
 
   let index = 1;
-  for (const task of [...overdue, ...pending]) {
-    const isOverdue = task.status === 'overdue';
-    const dueStr = task.due_date ? ` (Due: ${formatDueDate(new Date(task.due_date))})` : '';
-    const overdueTag = isOverdue ? '[OVERDUE ⚠️] ' : '';
-    lines.push(`${index}. ${overdueTag}${task.title}${dueStr}`);
+  for (const task of tasks) {
+    lines.push(formatTaskLine(index, task));
     index++;
   }
 
   lines.push('');
-  lines.push(`Total: ${tasks.length} pending${overdue.length > 0 ? `, ${overdue.length} overdue` : ''}`);
-  lines.push('\nPlease pick up or update these tasks! 💪');
+  lines.push(`_Total: ${tasks.length} pending_`);
 
   return lines.join('\n');
 }
 
 export function groupEveningMessage(groupName: string, tasks: TaskWithEmployee[]): string {
-  const overdue = tasks.filter((t) => t.status === 'overdue');
-  const pending = tasks.filter((t) => t.status !== 'overdue');
-
   const lines: string[] = [
-    `🌆 End-of-day reminder! Pending tasks in ${groupName}:\n`,
+    `*Evening Reminder* 🌆\n`,
   ];
 
   let index = 1;
-  for (const task of [...overdue, ...pending]) {
-    const isOverdue = task.status === 'overdue';
-    const dueStr = task.due_date ? ` (Due: ${formatDueDate(new Date(task.due_date))})` : '';
-    const overdueTag = isOverdue ? '[OVERDUE ⚠️] ' : '';
-    lines.push(`${index}. ${overdueTag}${task.title}${dueStr}`);
+  for (const task of tasks) {
+    lines.push(formatTaskLine(index, task));
     index++;
   }
 
   lines.push('');
-  if (overdue.length > 0) {
-    lines.push(`⚠️ ${overdue.length} overdue task${overdue.length > 1 ? 's' : ''} need attention!`);
-  }
-  lines.push(`Total: ${tasks.length} still pending`);
+  lines.push(`_Total: ${tasks.length} pending_`);
 
   return lines.join('\n');
 }
