@@ -63,18 +63,15 @@ export function parseTaskMessage(text: string): ParsedTask | null {
     );
     if (byDateMatch) {
       const assigneeName = byDateMatch[1].replace('@', '').trim();
-      let descPart = byDateMatch[2].trim();
+      // Title is everything after the assignee — never strip date text
+      const titlePart = withoutPriority.slice(byDateMatch[1].length).trim();
       let dueDateStr = byDateMatch[3]?.trim();
 
       // If no explicit "by" keyword, try to parse a date from the end of the description
       if (!dueDateStr) {
-        const parsed = chrono.parse(descPart, new Date(), { forwardDate: true });
+        const parsed = chrono.parse(byDateMatch[2].trim(), new Date(), { forwardDate: true });
         if (parsed.length > 0) {
-          const lastParsed = parsed[parsed.length - 1];
-          dueDateStr = lastParsed.text;
-          descPart = (
-            descPart.slice(0, lastParsed.index) + descPart.slice(lastParsed.index + lastParsed.text.length)
-          ).trim();
+          dueDateStr = parsed[parsed.length - 1].text;
         }
       }
 
@@ -82,11 +79,11 @@ export function parseTaskMessage(text: string): ParsedTask | null {
         ? chrono.parseDate(dueDateStr, new Date(), { forwardDate: true })
         : null;
 
-      if (!assigneeName || !descPart) return null;
+      if (!assigneeName || !titlePart) return null;
 
       return {
         assigneeName,
-        title: descPart,
+        title: titlePart,
         dueDate,
         priority,
         rawText: text,
@@ -96,20 +93,15 @@ export function parseTaskMessage(text: string): ParsedTask | null {
 
   // Format 3: No assignee — just a task description (group task)
   // "#task finish the report by Friday"
-  let descPart = withoutPriority;
+  const descPart = withoutPriority;
   let dueDateStr: string | undefined;
   const byMatch = withoutPriority.match(/^(.+?)(?:\s+(?:by|on|due|before)\s+(.+))$/i);
   if (byMatch) {
-    descPart = byMatch[1].trim();
     dueDateStr = byMatch[2].trim();
   } else {
     const parsed = chrono.parse(descPart, new Date(), { forwardDate: true });
     if (parsed.length > 0) {
-      const lastParsed = parsed[parsed.length - 1];
-      dueDateStr = lastParsed.text;
-      descPart = (
-        descPart.slice(0, lastParsed.index) + descPart.slice(lastParsed.index + lastParsed.text.length)
-      ).trim();
+      dueDateStr = parsed[parsed.length - 1].text;
     }
   }
 
@@ -172,18 +164,15 @@ export function parseMultiTaskMessage(text: string): ParsedTask[] | null {
       : 'medium';
     let cleaned = itemText.replace(/\s*!(high|medium|low)\s*/gi, ' ').trim();
 
-    // Extract date
+    // Extract date — title always remains the full cleaned text (priority stripped only)
     let dueDate: Date | null = null;
     const byMatch = cleaned.match(/^(.+?)(?:\s+(?:by|on|due|before)\s+(.+))$/i);
     if (byMatch) {
-      cleaned = byMatch[1].trim();
       dueDate = chrono.parseDate(byMatch[2].trim(), new Date(), { forwardDate: true });
     } else {
       const parsed = chrono.parse(cleaned, new Date(), { forwardDate: true });
       if (parsed.length > 0) {
-        const last = parsed[parsed.length - 1];
-        dueDate = last.start.date();
-        cleaned = (cleaned.slice(0, last.index) + cleaned.slice(last.index + last.text.length)).trim();
+        dueDate = parsed[parsed.length - 1].start.date();
       }
     }
 
