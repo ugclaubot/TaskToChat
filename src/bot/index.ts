@@ -28,6 +28,10 @@ function formatNextDue(dateStr: string): string {
   });
 }
 
+function escapeTelegramMarkdown(text: string): string {
+  return text.replace(/([_*\[\]`])/g, '\\$1');
+}
+
 export function createBot(): Telegraf {
   const bot = new Telegraf(config.telegram.botToken);
 
@@ -80,10 +84,11 @@ export function createBot(): Telegraf {
           } else if (age) {
             infoStr = ` _(${age})_`;
           }
+          const safeTitle = escapeTelegramMarkdown(t.title);
           if (t.status === 'completed') {
-            lines.push(`${idx}. ✅ ~${t.title}~.${infoStr}`);
+            lines.push(`${idx}. ✅ ~${safeTitle}~.${infoStr}`);
           } else {
-            lines.push(`${idx}. ${t.title}.${infoStr}`);
+            lines.push(`${idx}. ${safeTitle}.${infoStr}`);
           }
           idx++;
         }
@@ -171,17 +176,18 @@ export function createBot(): Telegraf {
           } else if (age) {
             infoStr = ` _(${age})_`;
           }
+          const safeTitle = escapeTelegramMarkdown(t.title);
           if (t.status === 'completed') {
-            lines.push(`${idx}. ✅ ~${t.title}~.${infoStr}`);
+            lines.push(`${idx}. ✅ ~${safeTitle}~.${infoStr}`);
           } else {
-            lines.push(`${idx}. ${t.title}.${infoStr}`);
+            lines.push(`${idx}. ${safeTitle}.${infoStr}`);
           }
           idx++;
         }
 
         for (const r of routines) {
           const label = formatRecurrenceLabel(r.recurrence_type, r.recurrence_day, r.recurrence_month, r.anchor_date);
-          lines.push(`${idx}. 🔁 _${r.title}_ _(${label})_`);
+          lines.push(`${idx}. 🔁 _${escapeTelegramMarkdown(r.title)}_ _(${label})_`);
           idx++;
         }
 
@@ -293,7 +299,7 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
 
   const similar = findSimilarPendingTasks(parsed.title, employee?.id, String(chat.id));
   if (similar.length > 0) {
-    const dupeLines = similar.map(t => `• _${t.title}_ (${t.status})`).join('\n');
+    const dupeLines = similar.map(t => `• _${escapeTelegramMarkdown(t.title)}_ (${t.status})`).join('\n');
     await ctx.reply(
       `⚠️ Similar pending task(s) found:\n\n${dupeLines}\n\nCreating anyway...`,
       { parse_mode: 'Markdown', reply_to_message_id: ctx.message.message_id } as any
@@ -311,7 +317,7 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
   });
 
   const assignedLine = employee
-    ? `👤 *${employee.name}*`
+    ? `👤 *${escapeTelegramMarkdown(employee.name)}*`
     : `👥 *Group*`;
   const age = formatTaskAge(task.created_at);
   let infoStr = '';
@@ -324,7 +330,7 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
   }
 
   await ctx.reply(
-    `${assignedLine}\n\n1. ${task.title}.${infoStr}`,
+    `${assignedLine}\n\n1. ${escapeTelegramMarkdown(task.title)}.${infoStr}`,
     {
       parse_mode: 'Markdown',
       reply_to_message_id: ctx.message.message_id,
@@ -368,7 +374,7 @@ async function handleMultiTaskCreation(ctx: Context & { message: { text: string;
 
   const assigneeName = parsedTasks[0]?.assigneeName;
   const assignedLine = assigneeName
-    ? `👤 *${assigneeName}*`
+    ? `👤 *${escapeTelegramMarkdown(assigneeName)}*`
     : `👥 *Group tasks*`;
 
   const taskLines = createdTaskIds.map((id, i) => {
@@ -379,7 +385,7 @@ async function handleMultiTaskCreation(ctx: Context & { message: { text: string;
     } else {
       infoStr = ` _(created today)_`;
     }
-    return `${i + 1}. ${parsedTasks[i].title}.${infoStr}`;
+    return `${i + 1}. ${escapeTelegramMarkdown(parsedTasks[i].title)}.${infoStr}`;
   });
 
   const buttons: { text: string; callback_data: string }[][] = [];
@@ -451,11 +457,11 @@ async function handleRoutineCreation(ctx: Context & { message: { text: string; c
   const label = formatRecurrenceLabel(routine.recurrence_type, routine.recurrence_day, routine.recurrence_month, routine.anchor_date);
   const nextDueLabel = formatNextDue(routine.next_due);
   const assignedLine = employee
-    ? `👤 *${employee.name}*`
+    ? `👤 *${escapeTelegramMarkdown(employee.name)}*`
     : `👥 *Group*`;
 
   await ctx.reply(
-    `${assignedLine}\n\n🔁 _${routine.title}_\n_Every: ${label}_\n_Next due: ${nextDueLabel}_`,
+    `${assignedLine}\n\n🔁 _${escapeTelegramMarkdown(routine.title)}_\n_Every: ${label}_\n_Next due: ${nextDueLabel}_`,
     {
       parse_mode: 'Markdown',
       reply_to_message_id: ctx.message.message_id,
