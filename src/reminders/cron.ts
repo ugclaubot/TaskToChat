@@ -179,8 +179,8 @@ export function setupCron(bot: Telegraf): void {
     });
   }, { timezone: config.timezone });
 
-  // Evening reminders: 6:00 PM IST
-  cron.schedule('0 18 * * *', () => {
+  // Evening reminders: 5:00 PM IST
+  cron.schedule('0 17 * * *', () => {
     runEveningReminders(bot).catch((err) => {
       console.error('[Cron] Evening reminder error:', err);
     });
@@ -191,5 +191,5 @@ export function setupCron(bot: Telegraf): void {
     runOverdueCheck();
   });
 
-  console.log('[Cron] Scheduled: morning (10:15 AM IST), evening (6:00 PM IST), overdue check (hourly)');
+  console.log('[Cron] Scheduled: morning (10:15 AM IST), evening (5:00 PM IST), overdue check (hourly)');
 }
