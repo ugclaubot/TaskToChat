@@ -12,6 +12,16 @@ import {
   getUnassignedPendingTasksByGroup,
 } from '../models/task';
 import { getAllEmployees, getEmployeeById } from '../models/employee';
+import {
+  getAllRoutines,
+  getRoutineById,
+  updateRoutine,
+  stopRoutine,
+  pauseRoutine,
+  resumeRoutine,
+  calculateNextDue,
+  type RoutineRecurrence,
+} from '../models/routine';
 import { Telegraf } from 'telegraf';
 import { formatDueDate } from '../bot/taskParser';
 
@@ -40,6 +50,7 @@ router.get('/', (req: Request, res: Response) => {
   if (filters.to) queryFilters.toDate = filters.to + 'T23:59:59';
 
   const tasks = getAllTasksWithEmployees(queryFilters);
+  const routines = getAllRoutines();
   const stats = getTaskStats();
   const employees = getAllEmployees();
   const groupChats = getDistinctGroupChats();
@@ -57,6 +68,7 @@ router.get('/', (req: Request, res: Response) => {
 
   res.render('dashboard', {
     tasks,
+    routines,
     tasksByEmployee,
     stats,
     employees,
@@ -105,6 +117,66 @@ router.post('/tasks/:id/delete', (req: Request, res: Response) => {
   const id = parseInt(req.params.id, 10);
   if (!isNaN(id)) deleteTask(id);
   res.redirect('/');
+});
+
+router.post('/routines/:id/update', (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.redirect('/?msg=Invalid+routine+ID');
+
+  const routine = getRoutineById(id);
+  if (!routine) return res.redirect('/?msg=Routine+not+found');
+
+  const title = String(req.body.title || '').trim();
+  const recurrenceType = (req.body.recurrence_type || routine.recurrence_type) as RoutineRecurrence;
+  const recurrenceDayRaw = req.body.recurrence_day;
+  const recurrenceMonthRaw = req.body.recurrence_month;
+
+  let recurrenceDay: number | null = recurrenceDayRaw === '' || recurrenceDayRaw === undefined ? null : parseInt(recurrenceDayRaw, 10);
+  let recurrenceMonth: number | null = recurrenceMonthRaw === '' || recurrenceMonthRaw === undefined ? null : parseInt(recurrenceMonthRaw, 10);
+
+  if (recurrenceType === 'daily') {
+    recurrenceDay = null;
+    recurrenceMonth = null;
+  } else if (recurrenceType === 'weekly') {
+    if (recurrenceDay === null || isNaN(recurrenceDay)) recurrenceDay = 1;
+    recurrenceMonth = null;
+  } else if (recurrenceType === 'monthly' || recurrenceType === 'quarterly') {
+    if (recurrenceDay === null || isNaN(recurrenceDay)) recurrenceDay = 1;
+    recurrenceMonth = null;
+  } else if (recurrenceType === 'yearly') {
+    if (recurrenceDay === null || isNaN(recurrenceDay)) recurrenceDay = 1;
+    if (recurrenceMonth === null || isNaN(recurrenceMonth)) recurrenceMonth = 1;
+  }
+
+  const nextDue = calculateNextDue(recurrenceType, recurrenceDay, recurrenceMonth, new Date());
+
+  updateRoutine(id, {
+    title: title || routine.title,
+    recurrenceType,
+    recurrenceDay,
+    recurrenceMonth,
+    nextDue,
+  });
+
+  res.redirect('/?msg=Routine+updated');
+});
+
+router.post('/routines/:id/stop', (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  if (!isNaN(id)) stopRoutine(id);
+  res.redirect('/?msg=Routine+stopped');
+});
+
+router.post('/routines/:id/pause', (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  if (!isNaN(id)) pauseRoutine(id);
+  res.redirect('/?msg=Routine+paused');
+});
+
+router.post('/routines/:id/resume', (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  if (!isNaN(id)) resumeRoutine(id);
+  res.redirect('/?msg=Routine+resumed');
 });
 
 // Build inline keyboard buttons for tasks (numbered, two per row)

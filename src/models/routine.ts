@@ -260,6 +260,40 @@ export function stopRoutine(routineId: number): Routine | null {
   return getRoutineById(routineId);
 }
 
+export function updateRoutine(routineId: number, updates: {
+  title?: string;
+  assignedTo?: number | null;
+  groupChatId?: string | null;
+  groupChatName?: string | null;
+  recurrenceType?: RoutineRecurrence;
+  recurrenceDay?: number | null;
+  recurrenceMonth?: number | null;
+  anchorDate?: string | null;
+  nextDue?: string;
+  status?: RoutineStatus;
+}): Routine | null {
+  const db = getDb();
+  const fields: string[] = [];
+  const values: unknown[] = [];
+
+  if (updates.title !== undefined) { fields.push('title = ?'); values.push(updates.title); }
+  if (updates.assignedTo !== undefined) { fields.push('assigned_to = ?'); values.push(updates.assignedTo); }
+  if (updates.groupChatId !== undefined) { fields.push('group_chat_id = ?'); values.push(updates.groupChatId); }
+  if (updates.groupChatName !== undefined) { fields.push('group_chat_name = ?'); values.push(updates.groupChatName); }
+  if (updates.recurrenceType !== undefined) { fields.push('recurrence_type = ?'); values.push(updates.recurrenceType); }
+  if (updates.recurrenceDay !== undefined) { fields.push('recurrence_day = ?'); values.push(updates.recurrenceDay); }
+  if (updates.recurrenceMonth !== undefined) { fields.push('recurrence_month = ?'); values.push(updates.recurrenceMonth); }
+  if (updates.anchorDate !== undefined) { fields.push('anchor_date = ?'); values.push(updates.anchorDate); }
+  if (updates.nextDue !== undefined) { fields.push('next_due = ?'); values.push(updates.nextDue); }
+  if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
+
+  if (fields.length === 0) return getRoutineById(routineId);
+
+  values.push(routineId);
+  db.prepare(`UPDATE routines SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  return getRoutineById(routineId);
+}
+
 /**
  * Format a human-readable recurrence label for display.
  */

@@ -349,6 +349,64 @@
       });
     </script>
 
+    <!-- Routines -->
+    <div class="mb-5">
+      <button onclick="var el=document.getElementById('routine-list'); el.classList.toggle('hidden'); this.querySelector('.arr').textContent = el.classList.contains('hidden') ? '›' : '‹'"
+        class="flex items-center gap-1.5 text-[12px] text-muted hover:text-zinc-600 font-medium mb-2 px-1 transition">
+        <span class="arr text-[10px]">‹</span> Routines · <%= routines.length %>
+      </button>
+
+      <div id="routine-list" class="bg-surface rounded-2xl border border-subtle overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <% if (!routines || routines.length === 0) { %>
+          <div class="px-4 py-4 text-[12px] text-muted">No routines yet. Create one from Telegram using <code>#routine ...</code></div>
+        <% } %>
+
+        <% (routines || []).forEach(r => { %>
+        <div class="task-row px-4 py-3 border-b border-zinc-100/80 last:border-0">
+          <form method="POST" action="/routines/<%= r.id %>/update" class="space-y-2">
+            <div class="flex items-center gap-2">
+              <span class="text-[12px]"><%= r.status === 'active' ? '🔁' : (r.status === 'paused' ? '⏸️' : '⛔') %></span>
+              <input type="text" name="title" value="<%= r.title %>" class="flex-1 text-[13px] border border-subtle rounded-lg px-2 py-1.5" />
+              <span class="text-[11px] text-muted">#<%= r.id %></span>
+            </div>
+
+            <div class="flex items-center gap-2 flex-wrap">
+              <select name="recurrence_type" class="text-[11px] border border-subtle rounded-lg px-2 py-1.5 bg-surface text-zinc-600">
+                <option value="daily" <%= r.recurrence_type === 'daily' ? 'selected' : '' %>>Daily</option>
+                <option value="weekly" <%= r.recurrence_type === 'weekly' ? 'selected' : '' %>>Weekly</option>
+                <option value="monthly" <%= r.recurrence_type === 'monthly' ? 'selected' : '' %>>Monthly</option>
+                <option value="quarterly" <%= r.recurrence_type === 'quarterly' ? 'selected' : '' %>>Quarterly</option>
+                <option value="yearly" <%= r.recurrence_type === 'yearly' ? 'selected' : '' %>>Yearly</option>
+              </select>
+
+              <input type="number" name="recurrence_day" min="1" max="31" value="<%= r.recurrence_day ?? '' %>" placeholder="Day"
+                class="w-20 text-[11px] border border-subtle rounded-lg px-2 py-1.5 text-zinc-600" />
+              <input type="number" name="recurrence_month" min="1" max="12" value="<%= r.recurrence_month ?? '' %>" placeholder="Month"
+                class="w-20 text-[11px] border border-subtle rounded-lg px-2 py-1.5 text-zinc-600" />
+
+              <span class="text-[11px] text-muted">next: <%= r.next_due %></span>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button type="submit" class="text-[11px] bg-accent text-white px-2.5 py-1 rounded-lg">Save</button>
+            </div>
+          </form>
+
+          <div class="flex items-center gap-2 mt-2">
+            <% if (r.status === 'active') { %>
+              <form method="POST" action="/routines/<%= r.id %>/pause"><button class="text-[11px] border border-subtle rounded-lg px-2 py-1">Pause</button></form>
+            <% } else if (r.status === 'paused') { %>
+              <form method="POST" action="/routines/<%= r.id %>/resume"><button class="text-[11px] border border-subtle rounded-lg px-2 py-1">Resume</button></form>
+            <% } %>
+            <% if (r.status !== 'stopped') { %>
+              <form method="POST" action="/routines/<%= r.id %>/stop" onsubmit="return confirm('Stop this routine?')"><button class="text-[11px] text-red-600 border border-red-200 rounded-lg px-2 py-1">Stop</button></form>
+            <% } %>
+          </div>
+        </div>
+        <% }) %>
+      </div>
+    </div>
+
     <!-- Completed -->
     <% if (completedTasks.length > 0) { %>
     <div class="mb-5">

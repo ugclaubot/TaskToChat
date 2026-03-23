@@ -5,7 +5,7 @@ import { isTaskMessage, parseTaskMessage, parseMultiTaskMessage, formatDueDate }
 import { isRoutineMessage, parseRoutineMessage } from './routineParser';
 import { findOrCreateEmployee, autoRegisterFromTelegram } from '../models/employee';
 import { createTask, getTaskById, completeTask, getAllTasksWithEmployees, findSimilarPendingTasks } from '../models/task';
-import { createRoutine, getRoutineById, completeRoutineOccurrence, Routine, formatRecurrenceLabel } from '../models/routine';
+import { createRoutine, getRoutineById, completeRoutineOccurrence, Routine, formatRecurrenceLabel, calculateFirstDue } from '../models/routine';
 
 function formatTaskAge(createdAt?: string): string {
   if (!createdAt) return '';
@@ -404,6 +404,12 @@ async function handleRoutineCreation(ctx: Context & { message: { text: string; c
     employee = findOrCreateEmployee(parsed.assigneeName);
   }
 
+  const firstDue = calculateFirstDue(
+    parsed.recurrenceType,
+    parsed.recurrenceDay,
+    parsed.recurrenceMonth
+  );
+
   const routine = createRoutine({
     title: parsed.title,
     assignedTo: employee?.id,
@@ -414,6 +420,7 @@ async function handleRoutineCreation(ctx: Context & { message: { text: string; c
     recurrenceDay: parsed.recurrenceDay ?? undefined,
     recurrenceMonth: parsed.recurrenceMonth ?? undefined,
     anchorDate: parsed.anchorDate ?? undefined,
+    nextDue: firstDue,
   });
 
   const label = formatRecurrenceLabel(routine.recurrence_type, routine.recurrence_day, routine.recurrence_month, routine.anchor_date);

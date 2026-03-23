@@ -158,7 +158,6 @@ export function managerMorningSummary(
 ): string {
   const allTasks = Object.values(tasksByEmployee).flatMap((e) => e.tasks);
   const overdue = allTasks.filter((t) => t.status === 'overdue');
-  const pending = allTasks.filter((t) => t.status !== 'overdue');
 
   const lines: string[] = [
     `📊 Good morning, ${managerName}! Here's your team's task summary:\n`,
