@@ -73,7 +73,7 @@ export function createBot(): Telegraf {
 
         let idx = 1;
         for (const t of tasks) {
-          const duePart = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
+          const duePart = t.due_date ? ` (${formatDueDate(new Date(t.due_date))}) ` : '';
           const age = formatTaskAge(t.created_at);
           if (t.status === 'completed') {
             lines.push(`${idx}. ✅ ~${t.title}~${duePart}${age ? ` ${age}` : ''}`);
@@ -157,7 +157,7 @@ export function createBot(): Telegraf {
         let idx = 1;
 
         for (const t of tasks) {
-          const duePart = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
+          const duePart = t.due_date ? ` (${formatDueDate(new Date(t.due_date))}) ` : '';
           const age = formatTaskAge(t.created_at);
           if (t.status === 'completed') {
             lines.push(`${idx}. ✅ ~${t.title}~${duePart}${age ? ` ${age}` : ''}`);
@@ -298,7 +298,7 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
     dueDate: parsed.dueDate?.toISOString().split('T')[0] ?? undefined,
   });
 
-  const dueLine = parsed.dueDate ? ` _(${formatDueDate(parsed.dueDate)})_` : '';
+  const dueLine = parsed.dueDate ? ` (${formatDueDate(parsed.dueDate)})` : '';
   const assignedLine = employee
     ? `👤 *${employee.name}*`
     : `👥 *Group*`;
@@ -353,8 +353,8 @@ async function handleMultiTaskCreation(ctx: Context & { message: { text: string;
     : `👥 *Group tasks*`;
 
   const taskLines = createdTaskIds.map((id, i) => {
-    const duePart = parsedTasks[i].dueDate ? ` _(${formatDueDate(parsedTasks[i].dueDate!)})_` : '';
-    return `${i + 1}. _${parsedTasks[i].title}_${duePart} _created today_`;
+    const duePart = parsedTasks[i].dueDate ? ` (${formatDueDate(parsedTasks[i].dueDate!)})` : '';
+    return `${i + 1}. _${parsedTasks[i].title}_${duePart} [created today]`;
   });
 
   const buttons: { text: string; callback_data: string }[][] = [];
