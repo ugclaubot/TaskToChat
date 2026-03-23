@@ -15,9 +15,9 @@ function formatTaskAge(createdAt?: string): string {
   const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
   const dateLabel = created.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
-  if (days === 0) return `_created today_`;
-  if (days === 1) return `_created ${dateLabel} · 1d ago_`;
-  return `_created ${dateLabel} · ${days}d ago_`;
+  if (days === 0) return `[created today]`;
+  if (days === 1) return `[created ${dateLabel} · 1d ago]`;
+  return `[created ${dateLabel} · ${days}d ago]`;
 }
 
 function formatNextDue(dateStr: string): string {

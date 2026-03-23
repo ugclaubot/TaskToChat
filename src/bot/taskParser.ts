@@ -27,9 +27,9 @@ function looksLikeName(token: string): boolean {
  *  - #task @PersonName description by March 25
  */
 export function parseTaskMessage(text: string): ParsedTask | null {
-  // Strip the task: or #task prefix
+  // Strip the task: or #task prefix (allow space after #)
   const cleaned = text
-    .replace(/^(task:|#task)\s*/i, '')
+    .replace(/^(task:|#\s*task)\s*/i, '')
     .trim();
 
   if (!cleaned) return null;
@@ -129,7 +129,7 @@ export function parseTaskMessage(text: string): ParsedTask | null {
 }
 
 export function isTaskMessage(text: string): boolean {
-  return /^(task:|#task)\s*/i.test(text.trim());
+  return /^(task:|#\s*task)\s*/i.test(text.trim());
 }
 
 /**
@@ -151,8 +151,8 @@ export function parseMultiTaskMessage(text: string): ParsedTask[] | null {
   const bulletLines = lines.slice(1).filter(l => /^[-•*]\s+/.test(l));
   if (bulletLines.length === 0) return null;
 
-  // First line: #task or #task PersonName
-  const firstLine = lines[0].replace(/^(task:|#task)\s*/i, '').trim();
+  // First line: #task or # task or #task PersonName
+  const firstLine = lines[0].replace(/^(task:|#\s*task)\s*/i, '').trim();
 
   // Check if first line has an assignee name
   let assigneeName = '';
