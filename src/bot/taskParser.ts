@@ -201,11 +201,9 @@ export function parseMultiTaskMessage(text: string): ParsedTask[] | null {
 
 export function formatDueDate(date: Date | null): string {
   if (!date) return 'No due date';
-  return date.toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year:
-      date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
-    timeZone: 'Asia/Kolkata',
-  });
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const day = date.getDate();
+  const month = months[date.getMonth()];
+  const year = String(date.getFullYear()).slice(-2);
+  return `${day}${month}${year}`;
 }
