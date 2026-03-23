@@ -82,6 +82,23 @@ function runMigrations(db: Database.Database): void {
       added_by TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS routines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      assigned_to INTEGER REFERENCES employees(id),
+      assigned_by TEXT NOT NULL,
+      group_chat_id TEXT,
+      group_chat_name TEXT,
+      recurrence_type TEXT NOT NULL CHECK(recurrence_type IN ('daily','weekly','monthly','quarterly','yearly')),
+      recurrence_day INTEGER,
+      recurrence_month INTEGER,
+      anchor_date TEXT,
+      next_due TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','stopped')),
+      last_completed TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   db.exec(`
@@ -89,6 +106,11 @@ function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
     CREATE INDEX IF NOT EXISTS idx_task_updates_task_id ON task_updates(task_id);
+    
+    CREATE INDEX IF NOT EXISTS idx_routines_assigned_to ON routines(assigned_to);
+    CREATE INDEX IF NOT EXISTS idx_routines_status ON routines(status);
+    CREATE INDEX IF NOT EXISTS idx_routines_next_due ON routines(next_due);
+    CREATE INDEX IF NOT EXISTS idx_routines_group_chat_id ON routines(group_chat_id);
   `);
 
   console.log('[DB] Migrations complete');

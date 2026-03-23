@@ -2,8 +2,10 @@ import { Telegraf, Context } from 'telegraf';
 import { config } from '../config';
 import { registerCommands } from './commands';
 import { isTaskMessage, parseTaskMessage, parseMultiTaskMessage, formatDueDate } from './taskParser';
+import { isRoutineMessage, parseRoutineMessage } from './routineParser';
 import { findOrCreateEmployee, autoRegisterFromTelegram } from '../models/employee';
 import { createTask, getTaskById, completeTask, getAllTasksWithEmployees, findSimilarPendingTasks } from '../models/task';
+import { createRoutine, getRoutineById, completeRoutineOccurrence, Routine, formatRecurrenceLabel } from '../models/routine';
 
 function formatTaskAge(createdAt?: string): string {
   if (!createdAt) return '';
@@ -16,6 +18,16 @@ function formatTaskAge(createdAt?: string): string {
   if (days === 0) return `_created today_`;
   if (days === 1) return `_created ${dateLabel} · 1d ago_`;
   return `_created ${dateLabel} · ${days}d ago_`;
+}
+
+function formatNextDue(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'Asia/Kolkata',
+  });
 }
 
 export function createBot(): Telegraf {
@@ -54,18 +66,22 @@ export function createBot(): Telegraf {
           .filter(Boolean)
           .map((m: RegExpMatchArray) => parseInt(m[1], 10));
 
-        // Also include the current task ID in case its button was already removed
         if (!taskIds.includes(taskId)) taskIds.push(taskId);
 
         const tasks = taskIds.map((id: number) => getTaskById(id)).filter(Boolean) as import('../models/task').Task[];
-        const lines = tasks.map((t, i) => {
+        const lines: string[] = [];
+
+        let idx = 1;
+        for (const t of tasks) {
           const duePart = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
           const age = formatTaskAge(t.created_at);
           if (t.status === 'completed') {
-            return `${i + 1}. ✅ ~${t.title}~${duePart}${age ? ` ${age}` : ''}`;
+            lines.push(`${idx}. ✅ ~${t.title}~${duePart}${age ? ` ${age}` : ''}`);
+          } else {
+            lines.push(`${idx}. _${t.title}_${duePart}${age ? ` ${age}` : ''}`);
           }
-          return `${i + 1}. _${t.title}_${duePart}${age ? ` ${age}` : ''}`;
-        });
+          idx++;
+        }
 
         const remaining = tasks.filter(t => t.status !== 'completed').length;
         const total = tasks.length;
@@ -73,7 +89,7 @@ export function createBot(): Telegraf {
           ? '\n\n🎉 _All done!_'
           : `\n\n${total - remaining}/${total} ✅`;
 
-        // Compact buttons — numbered, two per row
+        // Rebuild buttons for pending tasks
         const pendingTasks = tasks.map((t, i) => ({ ...t, num: i + 1 })).filter(t => t.status !== 'completed');
         const buttons: { text: string; callback_data: string }[][] = [];
         for (let i = 0; i < pendingTasks.length; i += 2) {
@@ -98,6 +114,103 @@ export function createBot(): Telegraf {
     }
   });
 
+  // Handle routine checkbox button taps
+  bot.action(/^toggle_routine_(\d+)$/, async (ctx) => {
+    const routineId = parseInt(ctx.match[1], 10);
+    const routine = getRoutineById(routineId);
+    if (!routine) {
+      await ctx.answerCbQuery('❌ Routine not found');
+      return;
+    }
+
+    const completed = completeRoutineOccurrence(routineId);
+    if (!completed) {
+      await ctx.answerCbQuery('❌ Failed to update routine');
+      return;
+    }
+
+    const nextDueLabel = formatNextDue(completed.next_due);
+    await ctx.answerCbQuery(`✅ Done! Next: ${nextDueLabel}`);
+
+    try {
+      const markup = ctx.callbackQuery.message && 'reply_markup' in ctx.callbackQuery.message
+        ? (ctx.callbackQuery.message as any).reply_markup
+        : null;
+
+      if (markup?.inline_keyboard) {
+        const taskIds = markup.inline_keyboard
+          .flat()
+          .map((btn: any) => btn.callback_data?.match(/^toggle_task_(\d+)$/))
+          .filter(Boolean)
+          .map((m: RegExpMatchArray) => parseInt(m[1], 10));
+
+        const routineIds = markup.inline_keyboard
+          .flat()
+          .map((btn: any) => btn.callback_data?.match(/^toggle_routine_(\d+)$/))
+          .filter(Boolean)
+          .map((m: RegExpMatchArray) => parseInt(m[1], 10));
+
+        const tasks = taskIds.map((id: number) => getTaskById(id)).filter(Boolean) as import('../models/task').Task[];
+        const routines = routineIds.map((id: number) => getRoutineById(id)).filter(Boolean) as Routine[];
+
+        const lines: string[] = [];
+        let idx = 1;
+
+        for (const t of tasks) {
+          const duePart = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
+          const age = formatTaskAge(t.created_at);
+          if (t.status === 'completed') {
+            lines.push(`${idx}. ✅ ~${t.title}~${duePart}${age ? ` ${age}` : ''}`);
+          } else {
+            lines.push(`${idx}. _${t.title}_${duePart}${age ? ` ${age}` : ''}`);
+          }
+          idx++;
+        }
+
+        for (const r of routines) {
+          const label = formatRecurrenceLabel(r.recurrence_type, r.recurrence_day, r.recurrence_month, r.anchor_date);
+          lines.push(`${idx}. 🔁 _${r.title}_ _(${label})_`);
+          idx++;
+        }
+
+        // Rebuild buttons
+        const allPending = [...tasks.filter(t => t.status !== 'completed'), ...routines];
+        const buttons: { text: string; callback_data: string }[][] = [];
+        let btnIdx = 1;
+        for (let i = 0; i < allPending.length; i += 2) {
+          const row: { text: string; callback_data: string }[] = [];
+          const item1 = allPending[i];
+          const callback1 = 'assigned_to' in item1 ? `toggle_task_${(item1 as any).id}` : `toggle_routine_${(item1 as any).id}`;
+          row.push({ text: `☑️ ${btnIdx}`, callback_data: callback1 });
+
+          if (i + 1 < allPending.length) {
+            const item2 = allPending[i + 1];
+            const callback2 = 'assigned_to' in item2 ? `toggle_task_${(item2 as any).id}` : `toggle_routine_${(item2 as any).id}`;
+            row.push({ text: `☑️ ${btnIdx + 1}`, callback_data: callback2 });
+          }
+          buttons.push(row);
+          btnIdx += 2;
+        }
+
+        const pendingCount = tasks.filter(t => t.status !== 'completed').length + routines.length;
+        const totalCount = tasks.length + routines.length;
+        const statusLine = pendingCount === 0
+          ? '\n\n🎉 _All done!_'
+          : `\n\n${totalCount - pendingCount}/${totalCount} ✅`;
+
+        await ctx.editMessageText(
+          lines.join('\n') + statusLine,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: buttons.length > 0 ? { inline_keyboard: buttons } : undefined,
+          }
+        );
+      }
+    } catch (err) {
+      console.error('[Bot] Failed to update routine message:', err);
+    }
+  });
+
   // Handle ALL text messages — silently auto-register users
   bot.on('text', async (ctx) => {
     // Auto-register anyone who messages in a group
@@ -110,16 +223,23 @@ export function createBot(): Telegraf {
           ctx.from.username
         );
       } catch (err) {
-        // Silent — don't break flow
+        // Silent
       }
     }
 
     const text = ctx.message.text?.trim();
     if (!text) return;
 
+    // Handle routine messages
+    if (isRoutineMessage(text)) {
+      await handleRoutineCreation(ctx, text);
+      return;
+    }
+
+    // Handle task messages
     if (!isTaskMessage(text)) return;
 
-    // Try multi-task format first (bullet points)
+    // Try multi-task format first
     const multiTasks = parseMultiTaskMessage(text);
     if (multiTasks && multiTasks.length > 1) {
       await handleMultiTaskCreation(ctx, multiTasks);
@@ -159,7 +279,6 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
     employee = findOrCreateEmployee(parsed.assigneeName);
   }
 
-  // Check for duplicate/similar tasks
   const similar = findSimilarPendingTasks(parsed.title, employee?.id, String(chat.id));
   if (similar.length > 0) {
     const dupeLines = similar.map(t => `• _${t.title}_ (${t.status})`).join('\n');
@@ -180,11 +299,9 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
   });
 
   const dueLine = parsed.dueDate ? ` _(${formatDueDate(parsed.dueDate)})_` : '';
-
   const assignedLine = employee
     ? `👤 *${employee.name}*`
     : `👥 *Group*`;
-
   const age = formatTaskAge(task.created_at);
 
   await ctx.reply(
@@ -235,13 +352,11 @@ async function handleMultiTaskCreation(ctx: Context & { message: { text: string;
     ? `👤 *${assigneeName}*`
     : `👥 *Group tasks*`;
 
-  // Build numbered task lines
   const taskLines = createdTaskIds.map((id, i) => {
     const duePart = parsedTasks[i].dueDate ? ` _(${formatDueDate(parsedTasks[i].dueDate!)})_` : '';
     return `${i + 1}. _${parsedTasks[i].title}_${duePart} _created today_`;
   });
 
-  // Compact buttons — two per row where possible
   const buttons: { text: string; callback_data: string }[][] = [];
   for (let i = 0; i < createdTaskIds.length; i += 2) {
     const row: { text: string; callback_data: string }[] = [];
@@ -261,6 +376,65 @@ async function handleMultiTaskCreation(ctx: Context & { message: { text: string;
     } as any
   ).catch((err: unknown) => {
     console.error('[Bot] Failed to send multi-task confirmation:', err);
+  });
+}
+
+async function handleRoutineCreation(ctx: Context & { message: { text: string; chat: { id: number; title?: string; type: string } } }, text: string): Promise<void> {
+  const parsed = parseRoutineMessage(text);
+
+  if (!parsed) {
+    await ctx.reply(
+      '❌ Could not parse that routine. Try:\n' +
+      '`#routine @Name daily`\n' +
+      '`#routine @Name every Monday`\n' +
+      '`#routine @Name monthly on 20th`\n' +
+      '`#routine @Name yearly on 15 March`',
+      { parse_mode: 'Markdown', reply_to_message_id: ctx.message.message_id } as any
+    ).catch(() => {});
+    return;
+  }
+
+  const chat = ctx.message.chat;
+  const assignedBy = ctx.from?.username
+    ? `@${ctx.from.username}`
+    : ctx.from?.first_name ?? 'Unknown';
+
+  let employee = null;
+  if (parsed.assigneeName) {
+    employee = findOrCreateEmployee(parsed.assigneeName);
+  }
+
+  const routine = createRoutine({
+    title: parsed.title,
+    assignedTo: employee?.id,
+    assignedBy,
+    groupChatId: String(chat.id),
+    groupChatName: chat.type !== 'private' ? (chat.title ?? undefined) : undefined,
+    recurrenceType: parsed.recurrenceType,
+    recurrenceDay: parsed.recurrenceDay ?? undefined,
+    recurrenceMonth: parsed.recurrenceMonth ?? undefined,
+    anchorDate: parsed.anchorDate ?? undefined,
+  });
+
+  const label = formatRecurrenceLabel(routine.recurrence_type, routine.recurrence_day, routine.recurrence_month, routine.anchor_date);
+  const nextDueLabel = formatNextDue(routine.next_due);
+  const assignedLine = employee
+    ? `👤 *${employee.name}*`
+    : `👥 *Group*`;
+
+  await ctx.reply(
+    `${assignedLine}\n\n🔁 _${routine.title}_\n_Every: ${label}_\n_Next due: ${nextDueLabel}_`,
+    {
+      parse_mode: 'Markdown',
+      reply_to_message_id: ctx.message.message_id,
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: `☑️ Mark done`, callback_data: `toggle_routine_${routine.id}` }]
+        ]
+      },
+    } as any
+  ).catch((err: unknown) => {
+    console.error('[Bot] Failed to send routine confirmation:', err);
   });
 }
 

@@ -2,24 +2,44 @@ import cron from 'node-cron';
 import { Telegraf } from 'telegraf';
 import { getAllEmployees } from '../models/employee';
 import { getPendingTasksForEmployee, getUnassignedPendingTasksByGroup, updateOverdueTasks, incrementReminderCount, TaskWithEmployee } from '../models/task';
+import { getDueRoutinesForEmployee, getDueUnassignedRoutinesByGroup, RoutineWithEmployee } from '../models/routine';
 import { sendWhatsAppSafe } from './whatsapp';
 import { morningEmployeeMessage, eveningEmployeeMessage, managerMorningSummary, groupMorningMessage, groupEveningMessage } from './templates';
 import { config } from '../config';
 
 /**
- * Build compact checkbox inline keyboard buttons for tasks (2 per row).
+ * Build compact checkbox inline keyboard buttons for tasks + routines combined (2 per row).
+ * Line numbers are continuous: tasks first, then routines.
  */
-function buildTaskButtons(tasks: TaskWithEmployee[]): { text: string; callback_data: string }[][] {
+function buildCombinedButtons(
+  tasks: TaskWithEmployee[],
+  routines: RoutineWithEmployee[]
+): { text: string; callback_data: string }[][] {
+  const items: { num: number; callback_data: string }[] = [];
+  let num = 1;
+  for (const task of tasks) {
+    items.push({ num, callback_data: `toggle_task_${task.id}` });
+    num++;
+  }
+  for (const routine of routines) {
+    items.push({ num, callback_data: `toggle_routine_${routine.id}` });
+    num++;
+  }
+
   const buttons: { text: string; callback_data: string }[][] = [];
-  for (let i = 0; i < tasks.length; i += 2) {
+  for (let i = 0; i < items.length; i += 2) {
     const row: { text: string; callback_data: string }[] = [];
-    row.push({ text: `☑️ ${i + 1}`, callback_data: `toggle_task_${tasks[i].id}` });
-    if (i + 1 < tasks.length) {
-      row.push({ text: `☑️ ${i + 2}`, callback_data: `toggle_task_${tasks[i + 1].id}` });
+    row.push({ text: `☑️ ${items[i].num}`, callback_data: items[i].callback_data });
+    if (i + 1 < items.length) {
+      row.push({ text: `☑️ ${items[i + 1].num}`, callback_data: items[i + 1].callback_data });
     }
     buttons.push(row);
   }
   return buttons;
+}
+
+function buildTaskButtons(tasks: TaskWithEmployee[]): { text: string; callback_data: string }[][] {
+  return buildCombinedButtons(tasks, []);
 }
 
 /**
@@ -62,44 +82,56 @@ async function runMorningReminders(bot: Telegraf): Promise<void> {
   console.log('[Cron] Running morning reminders...');
   updateOverdueTasks();
 
+  const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const employees = getAllEmployees();
   const tasksByEmployee: Record<string, { employee: string; tasks: TaskWithEmployee[] }> = {};
 
   for (const employee of employees) {
     const tasks = getPendingTasksForEmployee(employee.id);
-    if (tasks.length === 0) continue;
+    const routines = getDueRoutinesForEmployee(employee.id, todayIST);
+    if (tasks.length === 0 && routines.length === 0) continue;
 
     tasksByEmployee[employee.id] = { employee: employee.name, tasks };
 
-    const msg = morningEmployeeMessage(employee.name, tasks);
-    const buttons = buildTaskButtons(tasks);
+    const msg = morningEmployeeMessage(employee.name, tasks, routines);
+    const buttons = buildCombinedButtons(tasks, routines);
     const sent = await sendReminder(bot, employee as any, msg, buttons);
     if (sent) {
       for (const task of tasks) {
         incrementReminderCount(task.id);
       }
-      console.log(`[Cron] Morning reminder sent to ${employee.name}`);
+      console.log(`[Cron] Morning reminder sent to ${employee.name} (${tasks.length} tasks, ${routines.length} routines)`);
     } else {
       console.warn(`[Cron] Could not reach ${employee.name} (no Telegram DM or WhatsApp)`);
     }
   }
 
-  // Send reminders for unassigned tasks to their group chats
+  // Send reminders for unassigned tasks + routines to their group chats
   const unassignedGroups = getUnassignedPendingTasksByGroup();
-  for (const [groupChatId, group] of Object.entries(unassignedGroups)) {
+  const unassignedRoutineGroups = getDueUnassignedRoutinesByGroup(todayIST);
+
+  // Merge group keys
+  const allGroupIds = new Set([...Object.keys(unassignedGroups), ...Object.keys(unassignedRoutineGroups)]);
+  for (const groupChatId of allGroupIds) {
     try {
-      const msg = groupMorningMessage(group.groupChatName, group.tasks);
-      const groupButtons = buildTaskButtons(group.tasks);
+      const taskGroup = unassignedGroups[groupChatId];
+      const routineGroup = unassignedRoutineGroups[groupChatId];
+      const tasks = taskGroup?.tasks ?? [];
+      const routines = routineGroup?.routines ?? [];
+      const groupName = taskGroup?.groupChatName ?? routineGroup?.groupChatName ?? groupChatId;
+
+      const msg = groupMorningMessage(groupName, tasks, routines);
+      const groupButtons = buildCombinedButtons(tasks, routines);
       await bot.telegram.sendMessage(groupChatId, msg, {
         parse_mode: 'Markdown',
         ...(groupButtons.length > 0 ? { reply_markup: { inline_keyboard: groupButtons } } : {}),
       });
-      for (const task of group.tasks) {
+      for (const task of tasks) {
         incrementReminderCount(task.id);
       }
-      console.log(`[Cron] Morning group reminder sent to ${group.groupChatName} (${group.tasks.length} tasks)`);
+      console.log(`[Cron] Morning group reminder sent to ${groupName} (${tasks.length} tasks, ${routines.length} routines)`);
     } catch (err: unknown) {
-      console.warn(`[Cron] Failed to send morning reminder to group ${group.groupChatName}:`, err);
+      console.warn(`[Cron] Failed to send morning reminder to group ${groupChatId}:`, err);
     }
   }
 
@@ -122,41 +154,52 @@ async function runEveningReminders(bot: Telegraf): Promise<void> {
   console.log('[Cron] Running evening reminders...');
   updateOverdueTasks();
 
+  const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const employees = getAllEmployees();
 
   for (const employee of employees) {
     const tasks = getPendingTasksForEmployee(employee.id);
-    if (tasks.length === 0) continue;
+    const routines = getDueRoutinesForEmployee(employee.id, todayIST);
+    if (tasks.length === 0 && routines.length === 0) continue;
 
-    const msg = eveningEmployeeMessage(employee.name, tasks);
-    const buttons = buildTaskButtons(tasks);
+    const msg = eveningEmployeeMessage(employee.name, tasks, routines);
+    const buttons = buildCombinedButtons(tasks, routines);
     const sent = await sendReminder(bot, employee as any, msg, buttons);
     if (sent) {
       for (const task of tasks) {
         incrementReminderCount(task.id);
       }
-      console.log(`[Cron] Evening reminder sent to ${employee.name}`);
+      console.log(`[Cron] Evening reminder sent to ${employee.name} (${tasks.length} tasks, ${routines.length} routines)`);
     } else {
       console.warn(`[Cron] Could not reach ${employee.name}`);
     }
   }
 
-  // Send reminders for unassigned tasks to their group chats
+  // Send reminders for unassigned tasks + routines to their group chats
   const unassignedGroups = getUnassignedPendingTasksByGroup();
-  for (const [groupChatId, group] of Object.entries(unassignedGroups)) {
+  const unassignedRoutineGroups = getDueUnassignedRoutinesByGroup(todayIST);
+
+  const allGroupIds = new Set([...Object.keys(unassignedGroups), ...Object.keys(unassignedRoutineGroups)]);
+  for (const groupChatId of allGroupIds) {
     try {
-      const msg = groupEveningMessage(group.groupChatName, group.tasks);
-      const groupButtons = buildTaskButtons(group.tasks);
+      const taskGroup = unassignedGroups[groupChatId];
+      const routineGroup = unassignedRoutineGroups[groupChatId];
+      const tasks = taskGroup?.tasks ?? [];
+      const routines = routineGroup?.routines ?? [];
+      const groupName = taskGroup?.groupChatName ?? routineGroup?.groupChatName ?? groupChatId;
+
+      const msg = groupEveningMessage(groupName, tasks, routines);
+      const groupButtons = buildCombinedButtons(tasks, routines);
       await bot.telegram.sendMessage(groupChatId, msg, {
         parse_mode: 'Markdown',
         ...(groupButtons.length > 0 ? { reply_markup: { inline_keyboard: groupButtons } } : {}),
       });
-      for (const task of group.tasks) {
+      for (const task of tasks) {
         incrementReminderCount(task.id);
       }
-      console.log(`[Cron] Evening group reminder sent to ${group.groupChatName} (${group.tasks.length} tasks)`);
+      console.log(`[Cron] Evening group reminder sent to ${groupName} (${tasks.length} tasks, ${routines.length} routines)`);
     } catch (err: unknown) {
-      console.warn(`[Cron] Failed to send evening reminder to group ${group.groupChatName}:`, err);
+      console.warn(`[Cron] Failed to send evening reminder to group ${groupChatId}:`, err);
     }
   }
 }

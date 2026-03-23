@@ -1,4 +1,5 @@
 import { TaskWithEmployee } from '../models/task';
+import { RoutineWithEmployee, formatRecurrenceLabel } from '../models/routine';
 import { formatDueDate } from '../bot/taskParser';
 
 /**
@@ -29,8 +30,10 @@ function formatTaskLine(index: number, task: TaskWithEmployee): string {
   return `${index}. ${task.title} _(${dateStr}, ${elapsed})_`;
 }
 
-export function morningEmployeeMessage(employeeName: string, tasks: TaskWithEmployee[]): string {
-  if (tasks.length === 0) {
+export function morningEmployeeMessage(employeeName: string, tasks: TaskWithEmployee[], routines?: RoutineWithEmployee[]): string {
+  const dueRoutines = routines ?? [];
+
+  if (tasks.length === 0 && dueRoutines.length === 0) {
     return `Good morning, ${employeeName}! 🌅\n\nYou have no pending tasks today. Great work staying on top of things!`;
   }
 
@@ -44,14 +47,26 @@ export function morningEmployeeMessage(employeeName: string, tasks: TaskWithEmpl
     index++;
   }
 
+  for (const routine of dueRoutines) {
+    const label = formatRecurrenceLabel(routine.recurrence_type, routine.recurrence_day, routine.recurrence_month, routine.anchor_date);
+    lines.push(`${index}. 🔁 ${routine.title} _(${label})_`);
+    index++;
+  }
+
   lines.push('');
-  lines.push(`_Total: ${tasks.length} pending_`);
+  if (dueRoutines.length > 0) {
+    lines.push(`_Total: ${tasks.length} pending, ${dueRoutines.length} routine${dueRoutines.length !== 1 ? 's' : ''}_`);
+  } else {
+    lines.push(`_Total: ${tasks.length} pending_`);
+  }
 
   return lines.join('\n');
 }
 
-export function eveningEmployeeMessage(employeeName: string, tasks: TaskWithEmployee[]): string {
-  if (tasks.length === 0) {
+export function eveningEmployeeMessage(employeeName: string, tasks: TaskWithEmployee[], routines?: RoutineWithEmployee[]): string {
+  const dueRoutines = routines ?? [];
+
+  if (tasks.length === 0 && dueRoutines.length === 0) {
     return `Good evening, ${employeeName}! 🌆\n\nAll tasks are complete! Enjoy your evening. 🎉`;
   }
 
@@ -65,13 +80,24 @@ export function eveningEmployeeMessage(employeeName: string, tasks: TaskWithEmpl
     index++;
   }
 
+  for (const routine of dueRoutines) {
+    const label = formatRecurrenceLabel(routine.recurrence_type, routine.recurrence_day, routine.recurrence_month, routine.anchor_date);
+    lines.push(`${index}. 🔁 ${routine.title} _(${label})_`);
+    index++;
+  }
+
   lines.push('');
-  lines.push(`_Total: ${tasks.length} pending_`);
+  if (dueRoutines.length > 0) {
+    lines.push(`_Total: ${tasks.length} pending, ${dueRoutines.length} routine${dueRoutines.length !== 1 ? 's' : ''}_`);
+  } else {
+    lines.push(`_Total: ${tasks.length} pending_`);
+  }
 
   return lines.join('\n');
 }
 
-export function groupMorningMessage(groupName: string, tasks: TaskWithEmployee[]): string {
+export function groupMorningMessage(groupName: string, tasks: TaskWithEmployee[], routines?: RoutineWithEmployee[]): string {
+  const dueRoutines = routines ?? [];
   const lines: string[] = [
     `*Morning Reminder* ☀️\n`,
   ];
@@ -82,13 +108,24 @@ export function groupMorningMessage(groupName: string, tasks: TaskWithEmployee[]
     index++;
   }
 
+  for (const routine of dueRoutines) {
+    const label = formatRecurrenceLabel(routine.recurrence_type, routine.recurrence_day, routine.recurrence_month, routine.anchor_date);
+    lines.push(`${index}. 🔁 ${routine.title} _(${label})_`);
+    index++;
+  }
+
   lines.push('');
-  lines.push(`_Total: ${tasks.length} pending_`);
+  if (dueRoutines.length > 0) {
+    lines.push(`_Total: ${tasks.length} pending, ${dueRoutines.length} routine${dueRoutines.length !== 1 ? 's' : ''}_`);
+  } else {
+    lines.push(`_Total: ${tasks.length} pending_`);
+  }
 
   return lines.join('\n');
 }
 
-export function groupEveningMessage(groupName: string, tasks: TaskWithEmployee[]): string {
+export function groupEveningMessage(groupName: string, tasks: TaskWithEmployee[], routines?: RoutineWithEmployee[]): string {
+  const dueRoutines = routines ?? [];
   const lines: string[] = [
     `*Evening Reminder* 🌆\n`,
   ];
@@ -99,8 +136,18 @@ export function groupEveningMessage(groupName: string, tasks: TaskWithEmployee[]
     index++;
   }
 
+  for (const routine of dueRoutines) {
+    const label = formatRecurrenceLabel(routine.recurrence_type, routine.recurrence_day, routine.recurrence_month, routine.anchor_date);
+    lines.push(`${index}. 🔁 ${routine.title} _(${label})_`);
+    index++;
+  }
+
   lines.push('');
-  lines.push(`_Total: ${tasks.length} pending_`);
+  if (dueRoutines.length > 0) {
+    lines.push(`_Total: ${tasks.length} pending, ${dueRoutines.length} routine${dueRoutines.length !== 1 ? 's' : ''}_`);
+  } else {
+    lines.push(`_Total: ${tasks.length} pending_`);
+  }
 
   return lines.join('\n');
 }

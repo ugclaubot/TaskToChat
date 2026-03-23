@@ -15,6 +15,17 @@ import {
   TaskWithEmployee,
   updateOverdueTasks,
 } from '../models/task';
+import {
+  getRoutinesForEmployee,
+  getAllRoutines,
+  getRoutinesByGroupChat,
+  getRoutineById,
+  pauseRoutine,
+  resumeRoutine,
+  stopRoutine,
+  formatRecurrenceLabel,
+  RoutineWithEmployee,
+} from '../models/routine';
 import { isAdmin, addAdmin, removeAdmin, getAllAdmins } from '../models/admin';
 import { formatDueDate } from './taskParser';
 
@@ -431,6 +442,107 @@ export function registerCommands(bot: Telegraf): void {
 
     ctx.reply(
       `🚨 *Overdue Tasks* (${tasks.length})\n\n${lines.join('\n\n')}`,
+      { parse_mode: 'Markdown' }
+    );
+  });
+
+  // /routines — list active routines (scoped to group if in a group chat)
+  bot.command('routines', (ctx) => {
+    const chatId = String(ctx.message.chat.id);
+    const isGroup = ctx.message.chat.type !== 'private';
+
+    const routines: RoutineWithEmployee[] = isGroup
+      ? getRoutinesByGroupChat(chatId)
+      : getAllRoutines().filter(r => r.status !== 'stopped');
+
+    if (routines.length === 0) {
+      return ctx.reply('🔁 No active routines.\n\nCreate one with:\n`#routine @Name task title daily`', {
+        parse_mode: 'Markdown',
+      });
+    }
+
+    const lines = routines.map((r, i) => {
+      const label = formatRecurrenceLabel(r.recurrence_type, r.recurrence_day, r.recurrence_month, r.anchor_date);
+      const nextDue = new Date(r.next_due + 'T00:00:00').toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata',
+      });
+      const assignee = r.employee_name ? ` · 👤 ${r.employee_name}` : '';
+      const statusTag = r.status === 'paused' ? ' ⏸' : '';
+      return `${i + 1}. 🔁 *${r.title}*${statusTag}\n   _(${label})_ · next: ${nextDue}${assignee} · #${r.id}`;
+    });
+
+    const header = isGroup
+      ? `🔁 *Routines* (${routines.length})`
+      : `🔁 *All Routines* (${routines.length})`;
+
+    ctx.reply(`${header}\n\n${lines.join('\n\n')}`, { parse_mode: 'Markdown' });
+  });
+
+  // /routine stop <id> | pause <id> | resume <id>
+  bot.command('routine', (ctx) => {
+    const args = ctx.message.text.replace('/routine', '').trim().split(/\s+/);
+    const subcommand = args[0]?.toLowerCase();
+    const idStr = args[1];
+
+    if (!subcommand || !idStr || !/^\d+$/.test(idStr)) {
+      return ctx.reply(
+        '❌ Usage:\n`/routine stop <id>`\n`/routine pause <id>`\n`/routine resume <id>`',
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    const id = parseInt(idStr, 10);
+    const routine = getRoutineById(id);
+    if (!routine) {
+      return ctx.reply(`❌ Routine #${id} not found.`);
+    }
+
+    switch (subcommand) {
+      case 'stop':
+        stopRoutine(id);
+        return ctx.reply(`🛑 Routine #${id} stopped.\n_"${routine.title}"_`, { parse_mode: 'Markdown' });
+      case 'pause':
+        pauseRoutine(id);
+        return ctx.reply(`⏸ Routine #${id} paused.\n_"${routine.title}"_`, { parse_mode: 'Markdown' });
+      case 'resume':
+        resumeRoutine(id);
+        return ctx.reply(`▶️ Routine #${id} resumed.\n_"${routine.title}"_`, { parse_mode: 'Markdown' });
+      default:
+        return ctx.reply('❌ Unknown subcommand. Use: `stop`, `pause`, or `resume`', { parse_mode: 'Markdown' });
+    }
+  });
+
+  // /myroutines — show routines assigned to the calling user
+  bot.command('myroutines', (ctx) => {
+    const username = ctx.from?.username;
+    if (!username) {
+      return ctx.reply('❌ You need a Telegram username to use /myroutines.');
+    }
+
+    const employee = getEmployeeByUsername(username);
+    if (!employee) {
+      return ctx.reply(
+        `❌ Your username @${username} isn't in the employee directory. Ask the manager to add you with /addemployee.`
+      );
+    }
+
+    const routines = getRoutinesForEmployee(employee.id);
+
+    if (routines.length === 0) {
+      return ctx.reply(`🔁 You have no active routines, ${employee.name}!`);
+    }
+
+    const lines = routines.map((r, i) => {
+      const label = formatRecurrenceLabel(r.recurrence_type, r.recurrence_day, r.recurrence_month, r.anchor_date);
+      const nextDue = new Date(r.next_due + 'T00:00:00').toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata',
+      });
+      const statusTag = r.status === 'paused' ? ' ⏸' : '';
+      return `${i + 1}. 🔁 _${r.title}_${statusTag}\n   _(${label})_ · next: ${nextDue} · #${r.id}`;
+    });
+
+    ctx.reply(
+      `🔁 *Your Routines, ${employee.name}* (${routines.length})\n\n${lines.join('\n\n')}`,
       { parse_mode: 'Markdown' }
     );
   });
