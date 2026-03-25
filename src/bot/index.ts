@@ -5,7 +5,16 @@ import { isTaskMessage, parseTaskMessage, parseMultiTaskMessage, formatDueDate }
 import { isRoutineMessage, parseRoutineMessage } from './routineParser';
 import { findOrCreateEmployee, autoRegisterFromTelegram } from '../models/employee';
 import { createTask, getTaskById, completeTask, getAllTasksWithEmployees, findSimilarPendingTasks } from '../models/task';
-import { createRoutine, getRoutineById, completeRoutineOccurrence, Routine, formatRecurrenceLabel, calculateFirstDue } from '../models/routine';
+import { createRoutine, getRoutineById, completeRoutineOccurrence, formatRecurrenceLabel, calculateFirstDue } from '../models/routine';
+import {
+  buildReminderButtons,
+  decodeReminderState,
+  encodeReminderState,
+  fallbackReminderStateFromMarkup,
+  markReminderItemDone,
+  renderReminderMessage,
+  type ReminderItem,
+} from './messageState';
 
 function formatTaskAge(createdAt?: string): string {
   if (!createdAt) return '';
@@ -18,19 +27,10 @@ function formatTaskAge(createdAt?: string): string {
   return `${days}d ago`;
 }
 
-function formatNextDue(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'Asia/Kolkata',
-  });
-}
-
 function escapeTelegramMarkdown(text: string): string {
   return text.replace(/([_*\[\]`])/g, '\\$1');
 }
+
 
 export function createBot(): Telegraf {
   const bot = new Telegraf(config.telegram.botToken);
@@ -47,78 +47,49 @@ export function createBot(): Telegraf {
       return;
     }
 
+    const message = ctx.callbackQuery.message;
+    const storedState = message && 'reply_markup' in message
+      ? decodeReminderState((message as any).reply_markup?.inline_keyboard?.slice(-1)?.[0]?.[0]?.callback_data?.startsWith('state:')
+          ? (message as any).reply_markup.inline_keyboard.slice(-1)[0][0].callback_data.slice(6)
+          : undefined)
+      : null;
+    const visibleMarkup = message && 'reply_markup' in message
+      ? {
+          inline_keyboard: ((message as any).reply_markup?.inline_keyboard ?? []).filter((row: any[]) => {
+            return !(row?.length === 1 && typeof row[0]?.callback_data === 'string' && row[0].callback_data.startsWith('state:'));
+          }),
+        }
+      : null;
+    const baseState = storedState ?? fallbackReminderStateFromMarkup(visibleMarkup);
+
     if (task.status === 'completed') {
+      const updatedState = markReminderItemDone(baseState, 'task', taskId);
       await ctx.answerCbQuery('Already done ✅');
+      try {
+        const buttons = buildReminderButtons(updatedState);
+        buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(updatedState)}` }]);
+        await ctx.editMessageText(renderReminderMessage(updatedState), {
+          parse_mode: 'MarkdownV2',
+          reply_markup: { inline_keyboard: buttons },
+        });
+      } catch (err) {
+        console.error('[Bot] Failed to refresh task message:', err);
+      }
       return;
     }
 
     const doneBy = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name ?? 'Unknown';
     completeTask(taskId, `Marked done by ${doneBy}`);
+    const updatedState = markReminderItemDone(baseState, 'task', taskId);
     await ctx.answerCbQuery(`✅ Task #${taskId} done!`);
 
-    // Rebuild the message with updated checkboxes
     try {
-      const markup = ctx.callbackQuery.message && 'reply_markup' in ctx.callbackQuery.message
-        ? (ctx.callbackQuery.message as any).reply_markup
-        : null;
-      if (markup?.inline_keyboard) {
-        const taskIds = markup.inline_keyboard
-          .flat()
-          .map((btn: any) => btn.callback_data?.match(/^toggle_task_(\d+)$/))
-          .filter(Boolean)
-          .map((m: RegExpMatchArray) => parseInt(m[1], 10));
-
-        if (!taskIds.includes(taskId)) taskIds.push(taskId);
-
-        const tasks = taskIds.map((id: number) => getTaskById(id)).filter(Boolean) as import('../models/task').Task[];
-        const lines: string[] = [];
-
-        let idx = 1;
-        for (const t of tasks) {
-          const age = formatTaskAge(t.created_at);
-          let infoStr = '';
-          if (t.due_date && age) {
-            infoStr = ` _(Due: ${formatDueDate(new Date(t.due_date))} | ${age})_`;
-          } else if (t.due_date) {
-            infoStr = ` _(Due: ${formatDueDate(new Date(t.due_date))})_`;
-          } else if (age) {
-            infoStr = ` _(${age})_`;
-          }
-          const safeTitle = escapeTelegramMarkdown(t.title);
-          if (t.status === 'completed') {
-            lines.push(`${idx}. ✅ ~${safeTitle}~.${infoStr}`);
-          } else {
-            lines.push(`${idx}. ${safeTitle}.${infoStr}`);
-          }
-          idx++;
-        }
-
-        const remaining = tasks.filter(t => t.status !== 'completed').length;
-        const total = tasks.length;
-        const statusLine = remaining === 0
-          ? '\n\n🎉 _All done!_'
-          : `\n\n${total - remaining}/${total} ✅`;
-
-        // Rebuild buttons for pending tasks
-        const pendingTasks = tasks.map((t, i) => ({ ...t, num: i + 1 })).filter(t => t.status !== 'completed');
-        const buttons: { text: string; callback_data: string }[][] = [];
-        for (let i = 0; i < pendingTasks.length; i += 2) {
-          const row: { text: string; callback_data: string }[] = [];
-          row.push({ text: `☑️ ${pendingTasks[i].num}`, callback_data: `toggle_task_${pendingTasks[i].id}` });
-          if (i + 1 < pendingTasks.length) {
-            row.push({ text: `☑️ ${pendingTasks[i + 1].num}`, callback_data: `toggle_task_${pendingTasks[i + 1].id}` });
-          }
-          buttons.push(row);
-        }
-
-        await ctx.editMessageText(
-          lines.join('\n') + statusLine,
-          {
-            parse_mode: 'Markdown',
-            reply_markup: buttons.length > 0 ? { inline_keyboard: buttons } : undefined,
-          }
-        );
-      }
+      const buttons = buildReminderButtons(updatedState);
+      buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(updatedState)}` }]);
+      await ctx.editMessageText(renderReminderMessage(updatedState), {
+        parse_mode: 'MarkdownV2',
+        reply_markup: { inline_keyboard: buttons },
+      });
     } catch (err) {
       console.error('[Bot] Failed to update task message:', err);
     }
@@ -133,100 +104,44 @@ export function createBot(): Telegraf {
       return;
     }
 
+    const message = ctx.callbackQuery.message;
+    const storedState = message && 'reply_markup' in message
+      ? decodeReminderState((message as any).reply_markup?.inline_keyboard?.slice(-1)?.[0]?.[0]?.callback_data?.startsWith('state:')
+          ? (message as any).reply_markup.inline_keyboard.slice(-1)[0][0].callback_data.slice(6)
+          : undefined)
+      : null;
+    const visibleMarkup = message && 'reply_markup' in message
+      ? {
+          inline_keyboard: ((message as any).reply_markup?.inline_keyboard ?? []).filter((row: any[]) => {
+            return !(row?.length === 1 && typeof row[0]?.callback_data === 'string' && row[0].callback_data.startsWith('state:'));
+          }),
+        }
+      : null;
+    const baseState = storedState ?? fallbackReminderStateFromMarkup(visibleMarkup);
+
     const completed = completeRoutineOccurrence(routineId);
     if (!completed) {
       await ctx.answerCbQuery('❌ Failed to update routine');
       return;
     }
 
-    const nextDueLabel = formatNextDue(completed.next_due);
-    await ctx.answerCbQuery(`✅ Done! Next: ${nextDueLabel}`);
+    const updatedState = markReminderItemDone(baseState, 'routine', routineId);
+    await ctx.answerCbQuery('✅ Marked done');
 
     try {
-      const markup = ctx.callbackQuery.message && 'reply_markup' in ctx.callbackQuery.message
-        ? (ctx.callbackQuery.message as any).reply_markup
-        : null;
-
-      if (markup?.inline_keyboard) {
-        const taskIds = markup.inline_keyboard
-          .flat()
-          .map((btn: any) => btn.callback_data?.match(/^toggle_task_(\d+)$/))
-          .filter(Boolean)
-          .map((m: RegExpMatchArray) => parseInt(m[1], 10));
-
-        const routineIds = markup.inline_keyboard
-          .flat()
-          .map((btn: any) => btn.callback_data?.match(/^toggle_routine_(\d+)$/))
-          .filter(Boolean)
-          .map((m: RegExpMatchArray) => parseInt(m[1], 10));
-
-        const tasks = taskIds.map((id: number) => getTaskById(id)).filter(Boolean) as import('../models/task').Task[];
-        const routines = routineIds.map((id: number) => getRoutineById(id)).filter(Boolean) as Routine[];
-
-        const lines: string[] = [];
-        let idx = 1;
-
-        for (const t of tasks) {
-          const age = formatTaskAge(t.created_at);
-          let infoStr = '';
-          if (t.due_date && age) {
-            infoStr = ` _(Due: ${formatDueDate(new Date(t.due_date))} | ${age})_`;
-          } else if (t.due_date) {
-            infoStr = ` _(Due: ${formatDueDate(new Date(t.due_date))})_`;
-          } else if (age) {
-            infoStr = ` _(${age})_`;
-          }
-          const safeTitle = escapeTelegramMarkdown(t.title);
-          if (t.status === 'completed') {
-            lines.push(`${idx}. ✅ ~${safeTitle}~.${infoStr}`);
-          } else {
-            lines.push(`${idx}. ${safeTitle}.${infoStr}`);
-          }
-          idx++;
-        }
-
-        for (const r of routines) {
-          const label = formatRecurrenceLabel(r.recurrence_type, r.recurrence_day, r.recurrence_month, r.anchor_date);
-          lines.push(`${idx}. 🔁 _${escapeTelegramMarkdown(r.title)}_ _(${label})_`);
-          idx++;
-        }
-
-        // Rebuild buttons
-        const allPending = [...tasks.filter(t => t.status !== 'completed'), ...routines];
-        const buttons: { text: string; callback_data: string }[][] = [];
-        let btnIdx = 1;
-        for (let i = 0; i < allPending.length; i += 2) {
-          const row: { text: string; callback_data: string }[] = [];
-          const item1 = allPending[i];
-          const callback1 = 'assigned_to' in item1 ? `toggle_task_${(item1 as any).id}` : `toggle_routine_${(item1 as any).id}`;
-          row.push({ text: `☑️ ${btnIdx}`, callback_data: callback1 });
-
-          if (i + 1 < allPending.length) {
-            const item2 = allPending[i + 1];
-            const callback2 = 'assigned_to' in item2 ? `toggle_task_${(item2 as any).id}` : `toggle_routine_${(item2 as any).id}`;
-            row.push({ text: `☑️ ${btnIdx + 1}`, callback_data: callback2 });
-          }
-          buttons.push(row);
-          btnIdx += 2;
-        }
-
-        const pendingCount = tasks.filter(t => t.status !== 'completed').length + routines.length;
-        const totalCount = tasks.length + routines.length;
-        const statusLine = pendingCount === 0
-          ? '\n\n🎉 _All done!_'
-          : `\n\n${totalCount - pendingCount}/${totalCount} ✅`;
-
-        await ctx.editMessageText(
-          lines.join('\n') + statusLine,
-          {
-            parse_mode: 'Markdown',
-            reply_markup: buttons.length > 0 ? { inline_keyboard: buttons } : undefined,
-          }
-        );
-      }
+      const buttons = buildReminderButtons(updatedState);
+      buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(updatedState)}` }]);
+      await ctx.editMessageText(renderReminderMessage(updatedState), {
+        parse_mode: 'MarkdownV2',
+        reply_markup: { inline_keyboard: buttons },
+      });
     } catch (err) {
       console.error('[Bot] Failed to update routine message:', err);
     }
+  });
+
+  bot.action(/^state:/, async (ctx) => {
+    await ctx.answerCbQuery();
   });
 
   // Handle ALL text messages — silently auto-register users
@@ -329,16 +244,16 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
     infoStr = ` _(${age})_`;
   }
 
+  const state: ReminderItem[] = [{ kind: 'task', id: task.id, done: false }];
+  const buttons = buildReminderButtons(state);
+  buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(state)}` }]);
+
   await ctx.reply(
-    `${assignedLine}\n\n1. ${escapeTelegramMarkdown(task.title)}.${infoStr}`,
+    renderReminderMessage(state),
     {
-      parse_mode: 'Markdown',
+      parse_mode: 'MarkdownV2',
       reply_to_message_id: ctx.message.message_id,
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: `☑️ Mark done`, callback_data: `toggle_task_${task.id}` }]
-        ]
-      },
+      reply_markup: { inline_keyboard: buttons },
     } as any
   ).catch((err: unknown) => {
     console.error('[Bot] Failed to send task confirmation:', err);
@@ -372,36 +287,14 @@ async function handleMultiTaskCreation(ctx: Context & { message: { text: string;
     createdTaskIds.push(task.id);
   }
 
-  const assigneeName = parsedTasks[0]?.assigneeName;
-  const assignedLine = assigneeName
-    ? `👤 *${escapeTelegramMarkdown(assigneeName)}*`
-    : `👥 *Group tasks*`;
-
-  const taskLines = createdTaskIds.map((id, i) => {
-    const dueDate = parsedTasks[i].dueDate;
-    let infoStr = '';
-    if (dueDate) {
-      infoStr = ` _(Due: ${formatDueDate(dueDate)} | created today)_`;
-    } else {
-      infoStr = ` _(created today)_`;
-    }
-    return `${i + 1}. ${escapeTelegramMarkdown(parsedTasks[i].title)}.${infoStr}`;
-  });
-
-  const buttons: { text: string; callback_data: string }[][] = [];
-  for (let i = 0; i < createdTaskIds.length; i += 2) {
-    const row: { text: string; callback_data: string }[] = [];
-    row.push({ text: `☑️ ${i + 1}`, callback_data: `toggle_task_${createdTaskIds[i]}` });
-    if (i + 1 < createdTaskIds.length) {
-      row.push({ text: `☑️ ${i + 2}`, callback_data: `toggle_task_${createdTaskIds[i + 1]}` });
-    }
-    buttons.push(row);
-  }
+  const state: ReminderItem[] = createdTaskIds.map((id) => ({ kind: 'task', id, done: false }));
+  const buttons = buildReminderButtons(state);
+  buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(state)}` }]);
 
   await ctx.reply(
-    `${assignedLine}\n\n${taskLines.join('\n')}`,
+    renderReminderMessage(state),
     {
-      parse_mode: 'Markdown',
+      parse_mode: 'MarkdownV2',
       reply_to_message_id: ctx.message.message_id,
       reply_markup: { inline_keyboard: buttons },
     } as any
@@ -454,22 +347,16 @@ async function handleRoutineCreation(ctx: Context & { message: { text: string; c
     nextDue: firstDue,
   });
 
-  const label = formatRecurrenceLabel(routine.recurrence_type, routine.recurrence_day, routine.recurrence_month, routine.anchor_date);
-  const nextDueLabel = formatNextDue(routine.next_due);
-  const assignedLine = employee
-    ? `👤 *${escapeTelegramMarkdown(employee.name)}*`
-    : `👥 *Group*`;
+  const state: ReminderItem[] = [{ kind: 'routine', id: routine.id, done: false }];
+  const buttons = buildReminderButtons(state);
+  buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(state)}` }]);
 
   await ctx.reply(
-    `${assignedLine}\n\n🔁 _${escapeTelegramMarkdown(routine.title)}_\n_Every: ${label}_\n_Next due: ${nextDueLabel}_`,
+    renderReminderMessage(state),
     {
-      parse_mode: 'Markdown',
+      parse_mode: 'MarkdownV2',
       reply_to_message_id: ctx.message.message_id,
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: `☑️ Mark done`, callback_data: `toggle_routine_${routine.id}` }]
-        ]
-      },
+      reply_markup: { inline_keyboard: buttons },
     } as any
   ).catch((err: unknown) => {
     console.error('[Bot] Failed to send routine confirmation:', err);

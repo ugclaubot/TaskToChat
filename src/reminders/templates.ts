@@ -20,14 +20,14 @@ function timeElapsed(dateStr: string): string {
 }
 
 /**
- * Format a task line with date + time elapsed in italic brackets.
+ * Format a task line with date + time elapsed in square brackets.
  */
 function formatTaskLine(index: number, task: TaskWithEmployee): string {
   const dateStr = task.due_date
     ? formatDueDate(new Date(task.due_date))
     : formatDueDate(new Date(task.created_at));
   const elapsed = timeElapsed(task.due_date || task.created_at);
-  return `${index}. ${task.title} _(${dateStr}, ${elapsed})_`;
+  return `${index}. ${task.title} [${dateStr}, ${elapsed}]`;
 }
 
 export function morningEmployeeMessage(employeeName: string, tasks: TaskWithEmployee[], routines?: RoutineWithEmployee[]): string {

@@ -181,15 +181,10 @@ router.post('/routines/:id/resume', (req: Request, res: Response) => {
 
 // Build inline keyboard buttons for tasks (numbered, two per row)
 function buildTaskButtons(tasks: { id: number }[]): { text: string; callback_data: string }[][] {
-  const buttons: { text: string; callback_data: string }[][] = [];
-  for (let i = 0; i < tasks.length; i += 2) {
-    const row: { text: string; callback_data: string }[] = [];
-    row.push({ text: `☑️ ${i + 1}`, callback_data: `toggle_task_${tasks[i].id}` });
-    if (i + 1 < tasks.length) {
-      row.push({ text: `☑️ ${i + 2}`, callback_data: `toggle_task_${tasks[i + 1].id}` });
-    }
-    buttons.push(row);
-  }
+  const state = tasks.map((task) => ({ kind: 'task' as const, id: task.id, done: false }));
+  const { buildReminderButtons, encodeReminderState } = require('../bot/messageState');
+  const buttons = buildReminderButtons(state);
+  buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(state)}` }]);
   return buttons;
 }
 

@@ -6,40 +6,20 @@ import { getDueRoutinesForEmployee, getDueUnassignedRoutinesByGroup, RoutineWith
 import { sendWhatsAppSafe } from './whatsapp';
 import { morningEmployeeMessage, eveningEmployeeMessage, managerMorningSummary, groupMorningMessage, groupEveningMessage } from './templates';
 import { config } from '../config';
+import { buildReminderButtons, encodeReminderState, type ReminderItem } from '../bot/messageState';
 
-/**
- * Build compact checkbox inline keyboard buttons for tasks + routines combined (2 per row).
- * Line numbers are continuous: tasks first, then routines.
- */
 function buildCombinedButtons(
   tasks: TaskWithEmployee[],
   routines: RoutineWithEmployee[]
 ): { text: string; callback_data: string }[][] {
-  const items: { num: number; callback_data: string }[] = [];
-  let num = 1;
-  for (const task of tasks) {
-    items.push({ num, callback_data: `toggle_task_${task.id}` });
-    num++;
-  }
-  for (const routine of routines) {
-    items.push({ num, callback_data: `toggle_routine_${routine.id}` });
-    num++;
-  }
+  const state: ReminderItem[] = [
+    ...tasks.map((task) => ({ kind: 'task' as const, id: task.id, done: false })),
+    ...routines.map((routine) => ({ kind: 'routine' as const, id: routine.id, done: false })),
+  ];
 
-  const buttons: { text: string; callback_data: string }[][] = [];
-  for (let i = 0; i < items.length; i += 2) {
-    const row: { text: string; callback_data: string }[] = [];
-    row.push({ text: `☑️ ${items[i].num}`, callback_data: items[i].callback_data });
-    if (i + 1 < items.length) {
-      row.push({ text: `☑️ ${items[i + 1].num}`, callback_data: items[i + 1].callback_data });
-    }
-    buttons.push(row);
-  }
+  const buttons = buildReminderButtons(state);
+  buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(state)}` }]);
   return buttons;
-}
-
-function buildTaskButtons(tasks: TaskWithEmployee[]): { text: string; callback_data: string }[][] {
-  return buildCombinedButtons(tasks, []);
 }
 
 /**
