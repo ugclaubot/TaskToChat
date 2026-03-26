@@ -1,5 +1,5 @@
-import { getTaskById, Task } from '../models/task';
-import { getRoutineById, Routine } from '../models/routine';
+import { getTaskById } from '../models/task';
+import { getRoutineById } from '../models/routine';
 import { formatDueDate } from './taskParser';
 
 export type ReminderTaskItem = {
@@ -147,7 +147,8 @@ export function renderReminderMessage(items: ReminderItem[]): string {
 
       const safeTitle = escapeTelegramMarkdown(task.title);
       const isDone = item.done || task.status === 'completed';
-      lines.push(`${index + 1}. ${isDone ? '✅' : '⬜'} ${safeTitle}${infoStr}`);
+      const renderedTitle = isDone ? `~${safeTitle}~` : safeTitle;
+      lines.push(`${index + 1}. ${isDone ? '✅' : '⬜'} ${renderedTitle}${infoStr}`);
       return;
     }
 
@@ -157,7 +158,8 @@ export function renderReminderMessage(items: ReminderItem[]): string {
     const safeTitle = escapeTelegramMarkdown(routine.title);
     const isDone = item.done;
     const nextDue = formatNextDue(routine.next_due);
-    lines.push(`${index + 1}. ${isDone ? '✅' : '🔁'} ${safeTitle} [next: ${nextDue}]`);
+    const renderedTitle = isDone ? `~${safeTitle}~` : safeTitle;
+    lines.push(`${index + 1}. ${isDone ? '✅' : '🔁'} ${renderedTitle} [next: ${nextDue}]`);
   });
 
   const doneCount = items.filter((item) => item.done).length;
