@@ -28,6 +28,7 @@ import {
 } from '../models/routine';
 import { isAdmin, addAdmin, removeAdmin, getAllAdmins } from '../models/admin';
 import { formatDueDate } from './taskParser';
+import { formatTaskAgeLabel } from '../utils/datetime';
 
 function isManagerOrAdmin(ctx: Context): boolean {
   const userId = ctx.from?.id?.toString();
@@ -53,16 +54,8 @@ function priorityEmoji(priority: string): string {
 }
 
 function formatTaskAge(createdAt?: string): string {
-  if (!createdAt) return '';
-  const created = new Date(createdAt);
-  const now = new Date();
-  const diffMs = now.getTime() - created.getTime();
-  const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-  const dateLabel = created.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-
-  if (days === 0) return `[created today]`;
-  if (days === 1) return `[created ${dateLabel} · 1d ago]`;
-  return `[created ${dateLabel} · ${days}d ago]`;
+  const label = formatTaskAgeLabel(createdAt);
+  return label ? `[${label}]` : '';
 }
 
 function formatTaskLine(task: TaskWithEmployee, index?: number): string {

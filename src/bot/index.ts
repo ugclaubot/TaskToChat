@@ -15,16 +15,12 @@ import {
   renderReminderMessage,
   type ReminderItem,
 } from './messageState';
+import { formatTaskAgeLabel } from '../utils/datetime';
 
 function formatTaskAge(createdAt?: string): string {
-  if (!createdAt) return '';
-  const created = new Date(createdAt);
-  const now = new Date();
-  const diffMs = now.getTime() - created.getTime();
-  const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-
-  if (days === 0) return `created today`;
-  return `${days}d ago`;
+  const label = formatTaskAgeLabel(createdAt);
+  if (!label) return '';
+  return label.replace(/^created\s+/, '').trim();
 }
 
 function escapeTelegramMarkdown(text: string): string {
