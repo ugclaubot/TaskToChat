@@ -38,7 +38,9 @@ export function morningEmployeeMessage(employeeName: string, tasks: TaskWithEmpl
   }
 
   const lines: string[] = [
-    `*Morning Reminder* ☀️\n`,
+    `*Morning Reminder* ☀️`,
+    `_Combined pending list from all unfinished tasks_`,
+    '',
   ];
 
   let index = 1;
@@ -71,7 +73,9 @@ export function eveningEmployeeMessage(employeeName: string, tasks: TaskWithEmpl
   }
 
   const lines: string[] = [
-    `*Evening Reminder* 🌆\n`,
+    `*Evening Reminder* 🌆`,
+    `_Combined pending list from all unfinished tasks_`,
+    '',
   ];
 
   let index = 1;
@@ -99,7 +103,9 @@ export function eveningEmployeeMessage(employeeName: string, tasks: TaskWithEmpl
 export function groupMorningMessage(groupName: string, tasks: TaskWithEmployee[], routines?: RoutineWithEmployee[]): string {
   const dueRoutines = routines ?? [];
   const lines: string[] = [
-    `*Morning Reminder* ☀️\n`,
+    `*Morning Reminder* ☀️`,
+    `_Combined pending list from all unfinished tasks_`,
+    '',
   ];
 
   let index = 1;
@@ -127,7 +133,9 @@ export function groupMorningMessage(groupName: string, tasks: TaskWithEmployee[]
 export function groupEveningMessage(groupName: string, tasks: TaskWithEmployee[], routines?: RoutineWithEmployee[]): string {
   const dueRoutines = routines ?? [];
   const lines: string[] = [
-    `*Evening Reminder* 🌆\n`,
+    `*Evening Reminder* 🌆`,
+    `_Combined pending list from all unfinished tasks_`,
+    '',
   ];
 
   let index = 1;

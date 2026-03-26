@@ -207,7 +207,7 @@ router.post('/tasks/send-telegram', async (req: Request, res: Response) => {
       if (tasks.length === 0) {
         return res.redirect('/?msg=No+pending+tasks');
       }
-      const lines = [`📋 *Your pending tasks (${tasks.length}):*\n`];
+      const lines = [`📋 *Your pending tasks (${tasks.length}):*`, `_Combined pending list from all unfinished tasks_`, ''];
       tasks.forEach((t, i) => {
         const due = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
         const overdue = t.status === 'overdue' ? ' ⚠️' : '';
@@ -228,7 +228,7 @@ router.post('/tasks/send-telegram', async (req: Request, res: Response) => {
         return res.redirect('/?msg=No+pending+tasks');
       }
       const groupName = allTasks[0]?.group_chat_name || 'Group';
-      const lines = [`📋 *Pending tasks (${allTasks.length}):*\n`];
+      const lines = [`📋 *Pending tasks (${allTasks.length}):*`, `_Combined pending list from all unfinished tasks_`, ''];
       allTasks.forEach((t, i) => {
         const due = t.due_date ? ` _(${formatDueDate(new Date(t.due_date))})_` : '';
         const overdue = t.status === 'overdue' ? ' ⚠️' : '';
