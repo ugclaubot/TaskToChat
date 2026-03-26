@@ -46,6 +46,8 @@ function runMigrations(db: Database.Database): void {
       assigned_by TEXT NOT NULL,
       group_chat_id TEXT,
       group_chat_name TEXT,
+      topic_id TEXT,
+      topic_name TEXT,
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','in_progress','completed','overdue')),
       priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('high','medium','low')),
       due_date TEXT,
@@ -73,6 +75,18 @@ function runMigrations(db: Database.Database): void {
     // Column already exists, ignore
   }
 
+  try {
+    db.exec(`ALTER TABLE tasks ADD COLUMN topic_id TEXT`);
+  } catch (_) {
+    // Column already exists, ignore
+  }
+
+  try {
+    db.exec(`ALTER TABLE tasks ADD COLUMN topic_name TEXT`);
+  } catch (_) {
+    // Column already exists, ignore
+  }
+
   // Admins table
   db.exec(`
     CREATE TABLE IF NOT EXISTS admins (
@@ -90,6 +104,8 @@ function runMigrations(db: Database.Database): void {
       assigned_by TEXT NOT NULL,
       group_chat_id TEXT,
       group_chat_name TEXT,
+      topic_id TEXT,
+      topic_name TEXT,
       recurrence_type TEXT NOT NULL CHECK(recurrence_type IN ('daily','weekly','monthly','quarterly','yearly')),
       recurrence_day INTEGER,
       recurrence_month INTEGER,
@@ -101,16 +117,30 @@ function runMigrations(db: Database.Database): void {
     );
   `);
 
+  try {
+    db.exec(`ALTER TABLE routines ADD COLUMN topic_id TEXT`);
+  } catch (_) {
+    // Column already exists, ignore
+  }
+
+  try {
+    db.exec(`ALTER TABLE routines ADD COLUMN topic_name TEXT`);
+  } catch (_) {
+    // Column already exists, ignore
+  }
+
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
+    CREATE INDEX IF NOT EXISTS idx_tasks_group_topic ON tasks(group_chat_id, topic_id);
     CREATE INDEX IF NOT EXISTS idx_task_updates_task_id ON task_updates(task_id);
     
     CREATE INDEX IF NOT EXISTS idx_routines_assigned_to ON routines(assigned_to);
     CREATE INDEX IF NOT EXISTS idx_routines_status ON routines(status);
     CREATE INDEX IF NOT EXISTS idx_routines_next_due ON routines(next_due);
     CREATE INDEX IF NOT EXISTS idx_routines_group_chat_id ON routines(group_chat_id);
+    CREATE INDEX IF NOT EXISTS idx_routines_group_topic ON routines(group_chat_id, topic_id);
   `);
 
   console.log('[DB] Migrations complete');

@@ -12,6 +12,8 @@ export interface Task {
   assigned_by: string;
   group_chat_id: string | null;
   group_chat_name: string | null;
+  topic_id: string | null;
+  topic_name: string | null;
   status: TaskStatus;
   priority: TaskPriority;
   due_date: string | null;
@@ -41,14 +43,16 @@ export function createTask(params: {
   assignedBy: string;
   groupChatId?: string;
   groupChatName?: string;
+  topicId?: string;
+  topicName?: string;
   priority?: TaskPriority;
   dueDate?: string;
 }): Task {
   const db = getDb();
   const result = db
     .prepare(
-      `INSERT INTO tasks (title, description, assigned_to, assigned_by, group_chat_id, group_chat_name, priority, due_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO tasks (title, description, assigned_to, assigned_by, group_chat_id, group_chat_name, topic_id, topic_name, priority, due_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       params.title,
@@ -57,6 +61,8 @@ export function createTask(params: {
       params.assignedBy,
       params.groupChatId ?? null,
       params.groupChatName ?? null,
+      params.topicId ?? null,
+      params.topicName ?? null,
       params.priority ?? 'medium',
       params.dueDate ?? null
     );
@@ -118,10 +124,19 @@ export function findSimilarPendingTasks(title: string, assignedTo?: number, grou
   ).all(...values) as TaskWithEmployee[];
 }
 
-export function getTasksByGroupChat(groupChatId: string, status?: TaskStatus): TaskWithEmployee[] {
+export function getTasksByGroupChat(groupChatId: string, status?: TaskStatus, topicId?: string | null): TaskWithEmployee[] {
   const db = getDb();
   const conditions = ['t.group_chat_id = ?'];
   const values: unknown[] = [groupChatId];
+
+  if (topicId !== undefined) {
+    if (topicId === null) {
+      conditions.push('t.topic_id IS NULL');
+    } else {
+      conditions.push('t.topic_id = ?');
+      values.push(topicId);
+    }
+  }
 
   if (status) {
     conditions.push('t.status = ?');
@@ -261,23 +276,29 @@ export function findTasksByKeywords(keywords: string, employeeId?: number): Task
     .all(term, term) as Task[];
 }
 
-export function getUnassignedPendingTasksByGroup(): Record<string, { groupChatId: string; groupChatName: string; tasks: TaskWithEmployee[] }> {
+export function getUnassignedPendingTasksByGroup(): Record<string, { groupChatId: string; groupChatName: string; topicId: string | null; topicName: string | null; tasks: TaskWithEmployee[] }> {
   const db = getDb();
   const tasks = db.prepare(
     `SELECT t.*, NULL as employee_name, NULL as employee_username, NULL as employee_whatsapp
      FROM tasks t
      WHERE t.assigned_to IS NULL AND t.status IN ('pending','in_progress','overdue')
      AND t.group_chat_id IS NOT NULL
-     ORDER BY t.group_chat_id, t.status = 'overdue' DESC, t.due_date ASC`
+     ORDER BY t.group_chat_id, t.topic_id, t.status = 'overdue' DESC, t.due_date ASC`
   ).all() as TaskWithEmployee[];
 
-  const grouped: Record<string, { groupChatId: string; groupChatName: string; tasks: TaskWithEmployee[] }> = {};
+  const grouped: Record<string, { groupChatId: string; groupChatName: string; topicId: string | null; topicName: string | null; tasks: TaskWithEmployee[] }> = {};
   for (const task of tasks) {
-    const gid = task.group_chat_id!;
-    if (!grouped[gid]) {
-      grouped[gid] = { groupChatId: gid, groupChatName: task.group_chat_name || 'Unknown Group', tasks: [] };
+    const key = `${task.group_chat_id!}::${task.topic_id ?? 'root'}`;
+    if (!grouped[key]) {
+      grouped[key] = {
+        groupChatId: task.group_chat_id!,
+        groupChatName: task.group_chat_name || 'Unknown Group',
+        topicId: task.topic_id,
+        topicName: task.topic_name,
+        tasks: [],
+      };
     }
-    grouped[gid].tasks.push(task);
+    grouped[key].tasks.push(task);
   }
   return grouped;
 }

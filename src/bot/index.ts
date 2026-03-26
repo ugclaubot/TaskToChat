@@ -199,6 +199,9 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
   }
 
   const chat = ctx.message.chat;
+  const messageThreadId = (ctx.message as any).message_thread_id;
+  const topicId = messageThreadId ? String(messageThreadId) : undefined;
+  const topicName = chat.type !== 'private' && messageThreadId ? `Topic ${messageThreadId}` : undefined;
   const assignedBy = ctx.from?.username
     ? `@${ctx.from.username}`
     : ctx.from?.first_name ?? 'Unknown';
@@ -223,6 +226,8 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
     assignedBy,
     groupChatId: String(chat.id),
     groupChatName: chat.type !== 'private' ? (chat.title ?? undefined) : undefined,
+    topicId,
+    topicName,
     priority: parsed.priority,
     dueDate: parsed.dueDate?.toISOString().split('T')[0] ?? undefined,
   });
@@ -258,6 +263,9 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
 
 async function handleMultiTaskCreation(ctx: Context & { message: { text: string; chat: { id: number; title?: string; type: string } } }, parsedTasks: import('./taskParser').ParsedTask[]): Promise<void> {
   const chat = ctx.message.chat;
+  const messageThreadId = (ctx.message as any).message_thread_id;
+  const topicId = messageThreadId ? String(messageThreadId) : undefined;
+  const topicName = chat.type !== 'private' && messageThreadId ? `Topic ${messageThreadId}` : undefined;
   const assignedBy = ctx.from?.username
     ? `@${ctx.from.username}`
     : ctx.from?.first_name ?? 'Unknown';
@@ -276,6 +284,8 @@ async function handleMultiTaskCreation(ctx: Context & { message: { text: string;
       assignedBy,
       groupChatId: String(chat.id),
       groupChatName: chat.type !== 'private' ? (chat.title ?? undefined) : undefined,
+      topicId,
+      topicName,
       priority: parsed.priority,
       dueDate: parsed.dueDate?.toISOString().split('T')[0] ?? undefined,
     });
@@ -315,6 +325,9 @@ async function handleRoutineCreation(ctx: Context & { message: { text: string; c
   }
 
   const chat = ctx.message.chat;
+  const messageThreadId = (ctx.message as any).message_thread_id;
+  const topicId = messageThreadId ? String(messageThreadId) : undefined;
+  const topicName = chat.type !== 'private' && messageThreadId ? `Topic ${messageThreadId}` : undefined;
   const assignedBy = ctx.from?.username
     ? `@${ctx.from.username}`
     : ctx.from?.first_name ?? 'Unknown';
@@ -336,6 +349,8 @@ async function handleRoutineCreation(ctx: Context & { message: { text: string; c
     assignedBy,
     groupChatId: String(chat.id),
     groupChatName: chat.type !== 'private' ? (chat.title ?? undefined) : undefined,
+    topicId,
+    topicName,
     recurrenceType: parsed.recurrenceType,
     recurrenceDay: parsed.recurrenceDay ?? undefined,
     recurrenceMonth: parsed.recurrenceMonth ?? undefined,

@@ -257,6 +257,7 @@ export function registerCommands(bot: Telegraf): void {
 
     const arg = ctx.message.text.replace('/tasks', '').trim();
     const chatId = String(ctx.message.chat.id);
+    const topicId = (ctx.message as any).message_thread_id ? String((ctx.message as any).message_thread_id) : undefined;
     const isGroup = ctx.message.chat.type !== 'private';
     const groupName = isGroup ? ((ctx.message.chat as any).title ?? 'This group') : null;
 
@@ -268,7 +269,7 @@ export function registerCommands(bot: Telegraf): void {
       }
       let tasks: TaskWithEmployee[];
       if (isGroup) {
-        tasks = getTasksByGroupChat(chatId).filter(t => t.assigned_to === employee.id);
+        tasks = getTasksByGroupChat(chatId, undefined, topicId).filter(t => t.assigned_to === employee.id);
       } else {
         tasks = getAllTasksWithEmployees({ employeeId: employee.id }).filter(t => t.status !== 'completed');
       }
@@ -290,7 +291,7 @@ export function registerCommands(bot: Telegraf): void {
     // /tasks — show all, grouped by person
     let tasks: TaskWithEmployee[];
     if (isGroup) {
-      tasks = getTasksByGroupChat(chatId);
+      tasks = getTasksByGroupChat(chatId, undefined, topicId);
     } else {
       tasks = getAllTasksWithEmployees().filter(t => t.status !== 'completed');
     }
@@ -442,10 +443,11 @@ export function registerCommands(bot: Telegraf): void {
   // /routines — list active routines (scoped to group if in a group chat)
   bot.command('routines', (ctx) => {
     const chatId = String(ctx.message.chat.id);
+    const topicId = (ctx.message as any).message_thread_id ? String((ctx.message as any).message_thread_id) : undefined;
     const isGroup = ctx.message.chat.type !== 'private';
 
     const routines: RoutineWithEmployee[] = isGroup
-      ? getRoutinesByGroupChat(chatId)
+      ? getRoutinesByGroupChat(chatId, topicId)
       : getAllRoutines().filter(r => r.status !== 'stopped');
 
     if (routines.length === 0) {

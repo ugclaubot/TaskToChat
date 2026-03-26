@@ -99,11 +99,13 @@ async function runMorningReminders(bot: Telegraf): Promise<void> {
       const tasks = taskGroup?.tasks ?? [];
       const routines = routineGroup?.routines ?? [];
       const groupName = taskGroup?.groupChatName ?? routineGroup?.groupChatName ?? groupChatId;
+      const topicId = taskGroup?.topicId ?? routineGroup?.topicId ?? null;
 
       const msg = groupMorningMessage(groupName, tasks, routines);
       const groupButtons = buildCombinedButtons(tasks, routines);
       await bot.telegram.sendMessage(groupChatId, msg, {
         parse_mode: 'Markdown',
+        ...(topicId ? { message_thread_id: Number(topicId) } : {}),
         ...(groupButtons.length > 0 ? { reply_markup: { inline_keyboard: groupButtons } } : {}),
       });
       for (const task of tasks) {
@@ -167,11 +169,13 @@ async function runEveningReminders(bot: Telegraf): Promise<void> {
       const tasks = taskGroup?.tasks ?? [];
       const routines = routineGroup?.routines ?? [];
       const groupName = taskGroup?.groupChatName ?? routineGroup?.groupChatName ?? groupChatId;
+      const topicId = taskGroup?.topicId ?? routineGroup?.topicId ?? null;
 
       const msg = groupEveningMessage(groupName, tasks, routines);
       const groupButtons = buildCombinedButtons(tasks, routines);
       await bot.telegram.sendMessage(groupChatId, msg, {
         parse_mode: 'Markdown',
+        ...(topicId ? { message_thread_id: Number(topicId) } : {}),
         ...(groupButtons.length > 0 ? { reply_markup: { inline_keyboard: groupButtons } } : {}),
       });
       for (const task of tasks) {

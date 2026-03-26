@@ -10,6 +10,8 @@ export interface Routine {
   assigned_by: string;
   group_chat_id: string | null;
   group_chat_name: string | null;
+  topic_id: string | null;
+  topic_name: string | null;
   recurrence_type: RoutineRecurrence;
   recurrence_day: number | null; // 0-6 for weekly, 1-31 for monthly/quarterly, 1-31 for yearly
   recurrence_month: number | null; // 1-12 for yearly
@@ -79,6 +81,8 @@ export function createRoutine(params: {
   assignedBy: string;
   groupChatId?: string;
   groupChatName?: string;
+  topicId?: string;
+  topicName?: string;
   recurrenceType: RoutineRecurrence;
   recurrenceDay?: number;
   recurrenceMonth?: number;
@@ -93,10 +97,10 @@ export function createRoutine(params: {
   const result = db
     .prepare(
       `INSERT INTO routines (
-        title, assigned_to, assigned_by, group_chat_id, group_chat_name,
+        title, assigned_to, assigned_by, group_chat_id, group_chat_name, topic_id, topic_name,
         recurrence_type, recurrence_day, recurrence_month, anchor_date,
         next_due, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       params.title,
@@ -104,6 +108,8 @@ export function createRoutine(params: {
       params.assignedBy,
       params.groupChatId ?? null,
       params.groupChatName ?? null,
+      params.topicId ?? null,
+      params.topicName ?? null,
       params.recurrenceType,
       params.recurrenceDay ?? null,
       params.recurrenceMonth ?? null,
@@ -159,7 +165,7 @@ export function getDueRoutinesForEmployee(employeeId: number, date: string = new
     .all(employeeId, date) as RoutineWithEmployee[];
 }
 
-export function getDueUnassignedRoutinesByGroup(date: string = new Date().toISOString().split('T')[0]): Record<string, { groupChatId: string; groupChatName: string; routines: RoutineWithEmployee[] }> {
+export function getDueUnassignedRoutinesByGroup(date: string = new Date().toISOString().split('T')[0]): Record<string, { groupChatId: string; groupChatName: string; topicId: string | null; topicName: string | null; routines: RoutineWithEmployee[] }> {
   const db = getDb();
   const routines = db
     .prepare(
@@ -167,17 +173,23 @@ export function getDueUnassignedRoutinesByGroup(date: string = new Date().toISOS
        FROM routines r
        WHERE r.assigned_to IS NULL AND r.status = 'active' AND r.next_due <= ?
        AND r.group_chat_id IS NOT NULL
-       ORDER BY r.group_chat_id, r.next_due ASC`
+       ORDER BY r.group_chat_id, r.topic_id, r.next_due ASC`
     )
     .all(date) as RoutineWithEmployee[];
 
-  const grouped: Record<string, { groupChatId: string; groupChatName: string; routines: RoutineWithEmployee[] }> = {};
+  const grouped: Record<string, { groupChatId: string; groupChatName: string; topicId: string | null; topicName: string | null; routines: RoutineWithEmployee[] }> = {};
   for (const routine of routines) {
-    const gid = routine.group_chat_id!;
-    if (!grouped[gid]) {
-      grouped[gid] = { groupChatId: gid, groupChatName: routine.group_chat_name || 'Unknown Group', routines: [] };
+    const key = `${routine.group_chat_id!}::${routine.topic_id ?? 'root'}`;
+    if (!grouped[key]) {
+      grouped[key] = {
+        groupChatId: routine.group_chat_id!,
+        groupChatName: routine.group_chat_name || 'Unknown Group',
+        topicId: routine.topic_id,
+        topicName: routine.topic_name,
+        routines: [],
+      };
     }
-    grouped[gid].routines.push(routine);
+    grouped[key].routines.push(routine);
   }
   return grouped;
 }
@@ -195,17 +207,29 @@ export function getRoutinesForEmployee(employeeId: number): RoutineWithEmployee[
     .all(employeeId) as RoutineWithEmployee[];
 }
 
-export function getRoutinesByGroupChat(groupChatId: string): RoutineWithEmployee[] {
+export function getRoutinesByGroupChat(groupChatId: string, topicId?: string | null): RoutineWithEmployee[] {
   const db = getDb();
+  const conditions = ['r.group_chat_id = ?', "r.status IN ('active', 'paused')"];
+  const values: unknown[] = [groupChatId];
+
+  if (topicId !== undefined) {
+    if (topicId === null) {
+      conditions.push('r.topic_id IS NULL');
+    } else {
+      conditions.push('r.topic_id = ?');
+      values.push(topicId);
+    }
+  }
+
   return db
     .prepare(
       `SELECT r.*, e.name as employee_name, e.telegram_username as employee_username
        FROM routines r
        LEFT JOIN employees e ON r.assigned_to = e.id
-       WHERE r.group_chat_id = ? AND r.status IN ('active', 'paused')
+       WHERE ${conditions.join(' AND ')}
        ORDER BY r.next_due ASC`
     )
-    .all(groupChatId) as RoutineWithEmployee[];
+    .all(...values) as RoutineWithEmployee[];
 }
 
 export function getAllRoutines(): RoutineWithEmployee[] {
