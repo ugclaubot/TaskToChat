@@ -6,6 +6,7 @@ import {
   TaskWithEmployee,
   createTask,
   completeTask,
+  reopenTask,
   deleteTask,
   getDistinctGroupChats,
   getPendingTasksForEmployee,
@@ -110,6 +111,12 @@ router.post('/tasks/create', (req: Request, res: Response) => {
 router.post('/tasks/:id/done', (req: Request, res: Response) => {
   const id = parseInt(req.params.id, 10);
   if (!isNaN(id)) completeTask(id);
+  res.redirect('/');
+});
+
+router.post('/tasks/:id/undo', (req: Request, res: Response) => {
+  const id = parseInt(req.params.id, 10);
+  if (!isNaN(id)) reopenTask(id);
   res.redirect('/');
 });
 

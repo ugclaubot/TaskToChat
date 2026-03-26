@@ -4,7 +4,7 @@ import { registerCommands } from './commands';
 import { isTaskMessage, parseTaskMessage, parseMultiTaskMessage, formatDueDate } from './taskParser';
 import { isRoutineMessage, parseRoutineMessage } from './routineParser';
 import { findOrCreateEmployee, autoRegisterFromTelegram } from '../models/employee';
-import { createTask, getTaskById, completeTask, getAllTasksWithEmployees, findSimilarPendingTasks } from '../models/task';
+import { createTask, getTaskById, completeTask, reopenTask, getAllTasksWithEmployees, findSimilarPendingTasks } from '../models/task';
 import { createRoutine, getRoutineById, completeRoutineOccurrence, formatRecurrenceLabel, calculateFirstDue } from '../models/routine';
 import {
   buildReminderButtons,
@@ -12,6 +12,7 @@ import {
   encodeReminderState,
   fallbackReminderStateFromMarkup,
   markReminderItemDone,
+  markReminderItemPending,
   renderReminderMessage,
   type ReminderItem,
 } from './messageState';
@@ -89,6 +90,49 @@ export function createBot(): Telegraf {
     } catch (err) {
       console.error('[Bot] Failed to update task message:', err);
     }
+  });
+
+  bot.action(/^undo_task_(\d+)$/, async (ctx) => {
+    const taskId = parseInt(ctx.match[1], 10);
+    const task = getTaskById(taskId);
+    if (!task) {
+      await ctx.answerCbQuery('❌ Task not found');
+      return;
+    }
+
+    const message = ctx.callbackQuery.message;
+    const storedState = message && 'reply_markup' in message
+      ? decodeReminderState((message as any).reply_markup?.inline_keyboard?.slice(-1)?.[0]?.[0]?.callback_data?.startsWith('state:')
+          ? (message as any).reply_markup.inline_keyboard.slice(-1)[0][0].callback_data.slice(6)
+          : undefined)
+      : null;
+    const visibleMarkup = message && 'reply_markup' in message
+      ? {
+          inline_keyboard: ((message as any).reply_markup?.inline_keyboard ?? []).filter((row: any[]) => {
+            return !(row?.length === 1 && typeof row[0]?.callback_data === 'string' && row[0].callback_data.startsWith('state:'));
+          }),
+        }
+      : null;
+    const baseState = storedState ?? fallbackReminderStateFromMarkup(visibleMarkup);
+
+    reopenTask(taskId, `Reopened by ${ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name ?? 'Unknown'}`);
+    const updatedState = markReminderItemPending(baseState, 'task', taskId);
+    await ctx.answerCbQuery(`↩️ Task #${taskId} reopened`);
+
+    try {
+      const buttons = buildReminderButtons(updatedState);
+      buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(updatedState)}` }]);
+      await ctx.editMessageText(renderReminderMessage(updatedState), {
+        parse_mode: 'MarkdownV2',
+        reply_markup: { inline_keyboard: buttons },
+      });
+    } catch (err) {
+      console.error('[Bot] Failed to update reopened task message:', err);
+    }
+  });
+
+  bot.action(/^undo_routine_(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery('Routine undo is not supported yet');
   });
 
   // Handle routine checkbox button taps

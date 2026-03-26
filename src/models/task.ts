@@ -215,6 +215,15 @@ export function completeTask(taskId: number, note?: string): Task | null {
   return getTaskById(taskId);
 }
 
+export function reopenTask(taskId: number, note?: string): Task | null {
+  const db = getDb();
+  db.prepare(
+    `UPDATE tasks SET status = 'pending', completed_at = NULL WHERE id = ?`
+  ).run(taskId);
+  addTaskUpdate(taskId, 'reopened', note ?? 'Task reopened');
+  return getTaskById(taskId);
+}
+
 export function markTaskOverdue(taskId: number): void {
   const db = getDb();
   db.prepare(`UPDATE tasks SET status = 'overdue' WHERE id = ? AND status IN ('pending','in_progress')`).run(taskId);

@@ -94,26 +94,37 @@ export function markReminderItemDone(items: ReminderItem[], kind: ReminderItem['
   );
 }
 
+export function markReminderItemPending(items: ReminderItem[], kind: ReminderItem['kind'], id: number): ReminderItem[] {
+  return items.map((item) =>
+    item.kind === kind && item.id === id
+      ? { ...item, done: false }
+      : item
+  );
+}
+
 export function buildReminderButtons(items: ReminderItem[]): { text: string; callback_data: string }[][] {
-  const pendingItems = items.filter((item) => !item.done);
   const buttons: { text: string; callback_data: string }[][] = [];
 
-  for (let i = 0; i < pendingItems.length; i += 2) {
+  for (let i = 0; i < items.length; i += 2) {
     const row: { text: string; callback_data: string }[] = [];
 
-    const first = pendingItems[i];
-    const firstNum = items.findIndex((item) => item.kind === first.kind && item.id === first.id) + 1;
+    const first = items[i];
+    const firstNum = i + 1;
     row.push({
-      text: `☑️ ${firstNum}`,
-      callback_data: first.kind === 'task' ? `toggle_task_${first.id}` : `toggle_routine_${first.id}`,
+      text: `${first.done ? '↩️' : '☑️'} ${firstNum}`,
+      callback_data: first.kind === 'task'
+        ? `${first.done ? 'undo_task' : 'toggle_task'}_${first.id}`
+        : `${first.done ? 'undo_routine' : 'toggle_routine'}_${first.id}`,
     });
 
-    if (i + 1 < pendingItems.length) {
-      const second = pendingItems[i + 1];
-      const secondNum = items.findIndex((item) => item.kind === second.kind && item.id === second.id) + 1;
+    if (i + 1 < items.length) {
+      const second = items[i + 1];
+      const secondNum = i + 2;
       row.push({
-        text: `☑️ ${secondNum}`,
-        callback_data: second.kind === 'task' ? `toggle_task_${second.id}` : `toggle_routine_${second.id}`,
+        text: `${second.done ? '↩️' : '☑️'} ${secondNum}`,
+        callback_data: second.kind === 'task'
+          ? `${second.done ? 'undo_task' : 'toggle_task'}_${second.id}`
+          : `${second.done ? 'undo_routine' : 'toggle_routine'}_${second.id}`,
       });
     }
 

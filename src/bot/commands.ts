@@ -9,6 +9,7 @@ import {
 import {
   getAllTasksWithEmployees,
   completeTask,
+  reopenTask,
   findTasksByKeywords,
   getTaskById,
   getTasksByGroupChat,
@@ -92,6 +93,7 @@ export function registerCommands(bot: Telegraf): void {
       '/tasks - View all pending tasks\n' +
       '/mytasks - View your tasks\n' +
       '/done <ID> - Mark a task complete\n' +
+      '/undo <ID> - Reopen a completed task\n' +
       '/overdue - View overdue tasks\n' +
       '/addemployee - Add a team member\n' +
       '/employees - List all employees\n\n' +
@@ -116,6 +118,7 @@ export function registerCommands(bot: Telegraf): void {
       '/tasks @person — Tasks for a specific person\n' +
       '/mytasks — Your own tasks\n' +
       '/done <ID or keywords> — Mark task complete\n' +
+      '/undo <ID> — Reopen a completed task\n' +
       '/overdue — All overdue tasks\n\n' +
       '*Admin:*\n' +
       '/addadmin (reply to a user) — Make them admin\n' +
@@ -415,6 +418,30 @@ export function registerCommands(bot: Telegraf): void {
     const task = matches[0];
     completeTask(task.id, `Marked done by @${ctx.from?.username ?? 'unknown'}`);
     ctx.reply(`✅ Task #${task.id} marked as complete!\n\n_"${task.title}"_`, {
+      parse_mode: 'Markdown',
+    });
+  });
+
+  // /undo <ID>
+  bot.command('undo', (ctx) => {
+    const arg = ctx.message.text.replace('/undo', '').trim();
+    if (!arg || !/^\d+$/.test(arg)) {
+      return ctx.reply('❌ Usage: `/undo <task ID>`\nExample: `/undo 5`', {
+        parse_mode: 'Markdown',
+      });
+    }
+
+    const taskId = parseInt(arg, 10);
+    const task = getTaskById(taskId);
+    if (!task) {
+      return ctx.reply(`❌ Task #${taskId} not found.`);
+    }
+    if (task.status !== 'completed') {
+      return ctx.reply(`ℹ️ Task #${taskId} is not completed.`);
+    }
+
+    reopenTask(taskId, `Reopened by @${ctx.from?.username ?? 'unknown'}`);
+    return ctx.reply(`↩️ Task #${taskId} reopened.\n\n_"${task.title}"_`, {
       parse_mode: 'Markdown',
     });
   });
