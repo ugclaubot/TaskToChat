@@ -212,10 +212,15 @@ export function createBot(): Telegraf {
     // Handle task messages
     if (!isTaskMessage(text)) return;
 
-    // Try multi-task format first
+    // Try multi-task format first (handles #task\n- item1\n- item2 AND single bullet)
     const multiTasks = parseMultiTaskMessage(text);
-    if (multiTasks && multiTasks.length > 1) {
-      await handleMultiTaskCreation(ctx, multiTasks);
+    if (multiTasks && multiTasks.length > 0) {
+      if (multiTasks.length === 1) {
+        // Single bullet task — use single-task creation flow for cleaner UX
+        await handleTaskCreation(ctx, `#task ${multiTasks[0].assigneeName ? '@' + multiTasks[0].assigneeName + ' ' : ''}${multiTasks[0].title}${multiTasks[0].priority !== 'medium' ? ' !' + multiTasks[0].priority : ''}`);
+      } else {
+        await handleMultiTaskCreation(ctx, multiTasks);
+      }
       return;
     }
 
