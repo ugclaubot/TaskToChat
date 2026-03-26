@@ -145,17 +145,17 @@ export function renderReminderMessage(items: ReminderItem[]): string {
       const age = formatTaskAge(task.created_at);
       let infoStr = '';
       if (task.due_date && age) {
-        infoStr = ` [${formatDueDate(new Date(task.due_date))}, ${age}]`;
+        infoStr = ` \\[${escapeTelegramMarkdown(formatDueDate(new Date(task.due_date)))}, ${escapeTelegramMarkdown(age)}\\]`;
       } else if (task.due_date) {
-        infoStr = ` [${formatDueDate(new Date(task.due_date))}]`;
+        infoStr = ` \\[${escapeTelegramMarkdown(formatDueDate(new Date(task.due_date)))}\\]`;
       } else if (age) {
-        infoStr = ` [${age}]`;
+        infoStr = ` \\[${escapeTelegramMarkdown(age)}\\]`;
       }
 
       const safeTitle = escapeTelegramMarkdown(task.title);
       const isDone = item.done || task.status === 'completed';
       const renderedTitle = isDone ? `~${safeTitle}~` : safeTitle;
-      lines.push(`${index + 1}. ${isDone ? '✅' : '⬜'} ${renderedTitle}${infoStr}`);
+      lines.push(`${index + 1}\\. ${isDone ? '✅' : '⬜'} ${renderedTitle}${infoStr}`);
       return;
     }
 
@@ -164,16 +164,16 @@ export function renderReminderMessage(items: ReminderItem[]): string {
 
     const safeTitle = escapeTelegramMarkdown(routine.title);
     const isDone = item.done;
-    const nextDue = formatNextDue(routine.next_due);
+    const nextDue = escapeTelegramMarkdown(formatNextDue(routine.next_due));
     const renderedTitle = isDone ? `~${safeTitle}~` : safeTitle;
-    lines.push(`${index + 1}. ${isDone ? '✅' : '🔁'} ${renderedTitle} [next: ${nextDue}]`);
+    lines.push(`${index + 1}\\. ${isDone ? '✅' : '🔁'} ${renderedTitle} \\[next: ${nextDue}\\]`);
   });
 
   const doneCount = items.filter((item) => item.done).length;
   const totalCount = items.length;
   const statusLine = doneCount === totalCount
     ? '\n\n🎉 All done'
-    : `\n\n${doneCount}/${totalCount} completed`;
+    : `\n\n${doneCount}\\/${totalCount} completed`;
 
   return lines.join('\n') + statusLine;
 }
