@@ -37,12 +37,35 @@ function escapeTelegramMarkdown(text: string): string {
   return text.replace(/([_*!\[\]()`~>#+\-=|{}.!\\])/g, '\\$1');
 }
 
+/**
+ * Compact encoding: "t123+t124-r5+" where t=task, r=routine, +=done, -=pending
+ * Fits within Telegram's 64-byte callback_data limit for reasonable task counts.
+ */
 export function encodeReminderState(items: ReminderItem[]): string {
-  return JSON.stringify(items);
+  return items.map(item => {
+    const prefix = item.kind === 'task' ? 't' : 'r';
+    const suffix = item.done ? '+' : '-';
+    return `${prefix}${item.id}${suffix}`;
+  }).join('');
 }
 
 export function decodeReminderState(data?: string): ReminderItem[] | null {
   if (!data) return null;
+
+  // Try compact format first: "t123+t124-r5+"
+  const compactRegex = /([tr])(\d+)([+-])/g;
+  let match: RegExpExecArray | null;
+  const compactItems: ReminderItem[] = [];
+  while ((match = compactRegex.exec(data)) !== null) {
+    compactItems.push({
+      kind: match[1] === 't' ? 'task' : 'routine',
+      id: parseInt(match[2], 10),
+      done: match[3] === '+',
+    } as ReminderItem);
+  }
+  if (compactItems.length > 0) return compactItems;
+
+  // Fallback: legacy JSON format
   try {
     const parsed = JSON.parse(data);
     if (!Array.isArray(parsed)) return null;
