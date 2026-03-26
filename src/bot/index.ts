@@ -8,8 +8,6 @@ import { createTask, getTaskById, completeTask, reopenTask, getAllTasksWithEmplo
 import { createRoutine, getRoutineById, completeRoutineOccurrence, formatRecurrenceLabel, calculateFirstDue } from '../models/routine';
 import {
   buildReminderButtons,
-  decodeReminderState,
-  encodeReminderState,
   fallbackReminderStateFromMarkup,
   markReminderItemDone,
   markReminderItemPending,
@@ -45,26 +43,15 @@ export function createBot(): Telegraf {
     }
 
     const message = ctx.callbackQuery.message;
-    const storedState = message && 'reply_markup' in message
-      ? decodeReminderState((message as any).reply_markup?.inline_keyboard?.slice(-1)?.[0]?.[0]?.callback_data?.startsWith('state:')
-          ? (message as any).reply_markup.inline_keyboard.slice(-1)[0][0].callback_data.slice(6)
-          : undefined)
-      : null;
-    const visibleMarkup = message && 'reply_markup' in message
-      ? {
-          inline_keyboard: ((message as any).reply_markup?.inline_keyboard ?? []).filter((row: any[]) => {
-            return !(row?.length === 1 && typeof row[0]?.callback_data === 'string' && row[0].callback_data.startsWith('state:'));
-          }),
-        }
-      : null;
-    const baseState = storedState ?? fallbackReminderStateFromMarkup(visibleMarkup);
+    const baseState = message && 'reply_markup' in message
+      ? fallbackReminderStateFromMarkup((message as any).reply_markup)
+      : [];
 
     if (task.status === 'completed') {
       const updatedState = markReminderItemDone(baseState, 'task', taskId);
       await ctx.answerCbQuery('Already done ✅');
       try {
         const buttons = buildReminderButtons(updatedState);
-        buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(updatedState)}` }]);
         await ctx.editMessageText(renderReminderMessage(updatedState), {
           parse_mode: 'MarkdownV2',
           reply_markup: { inline_keyboard: buttons },
@@ -82,7 +69,6 @@ export function createBot(): Telegraf {
 
     try {
       const buttons = buildReminderButtons(updatedState);
-      buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(updatedState)}` }]);
       await ctx.editMessageText(renderReminderMessage(updatedState), {
         parse_mode: 'MarkdownV2',
         reply_markup: { inline_keyboard: buttons },
@@ -101,19 +87,9 @@ export function createBot(): Telegraf {
     }
 
     const message = ctx.callbackQuery.message;
-    const storedState = message && 'reply_markup' in message
-      ? decodeReminderState((message as any).reply_markup?.inline_keyboard?.slice(-1)?.[0]?.[0]?.callback_data?.startsWith('state:')
-          ? (message as any).reply_markup.inline_keyboard.slice(-1)[0][0].callback_data.slice(6)
-          : undefined)
-      : null;
-    const visibleMarkup = message && 'reply_markup' in message
-      ? {
-          inline_keyboard: ((message as any).reply_markup?.inline_keyboard ?? []).filter((row: any[]) => {
-            return !(row?.length === 1 && typeof row[0]?.callback_data === 'string' && row[0].callback_data.startsWith('state:'));
-          }),
-        }
-      : null;
-    const baseState = storedState ?? fallbackReminderStateFromMarkup(visibleMarkup);
+    const baseState = message && 'reply_markup' in message
+      ? fallbackReminderStateFromMarkup((message as any).reply_markup)
+      : [];
 
     reopenTask(taskId, `Reopened by ${ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name ?? 'Unknown'}`);
     const updatedState = markReminderItemPending(baseState, 'task', taskId);
@@ -121,7 +97,6 @@ export function createBot(): Telegraf {
 
     try {
       const buttons = buildReminderButtons(updatedState);
-      buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(updatedState)}` }]);
       await ctx.editMessageText(renderReminderMessage(updatedState), {
         parse_mode: 'MarkdownV2',
         reply_markup: { inline_keyboard: buttons },
@@ -145,19 +120,9 @@ export function createBot(): Telegraf {
     }
 
     const message = ctx.callbackQuery.message;
-    const storedState = message && 'reply_markup' in message
-      ? decodeReminderState((message as any).reply_markup?.inline_keyboard?.slice(-1)?.[0]?.[0]?.callback_data?.startsWith('state:')
-          ? (message as any).reply_markup.inline_keyboard.slice(-1)[0][0].callback_data.slice(6)
-          : undefined)
-      : null;
-    const visibleMarkup = message && 'reply_markup' in message
-      ? {
-          inline_keyboard: ((message as any).reply_markup?.inline_keyboard ?? []).filter((row: any[]) => {
-            return !(row?.length === 1 && typeof row[0]?.callback_data === 'string' && row[0].callback_data.startsWith('state:'));
-          }),
-        }
-      : null;
-    const baseState = storedState ?? fallbackReminderStateFromMarkup(visibleMarkup);
+    const baseState = message && 'reply_markup' in message
+      ? fallbackReminderStateFromMarkup((message as any).reply_markup)
+      : [];
 
     const completed = completeRoutineOccurrence(routineId);
     if (!completed) {
@@ -170,7 +135,6 @@ export function createBot(): Telegraf {
 
     try {
       const buttons = buildReminderButtons(updatedState);
-      buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(updatedState)}` }]);
       await ctx.editMessageText(renderReminderMessage(updatedState), {
         parse_mode: 'MarkdownV2',
         reply_markup: { inline_keyboard: buttons },
@@ -178,10 +142,6 @@ export function createBot(): Telegraf {
     } catch (err) {
       console.error('[Bot] Failed to update routine message:', err);
     }
-  });
-
-  bot.action(/^state:/, async (ctx) => {
-    await ctx.answerCbQuery();
   });
 
   // Handle ALL text messages — silently auto-register users
@@ -296,7 +256,6 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
 
   const state: ReminderItem[] = [{ kind: 'task', id: task.id, done: false }];
   const buttons = buildReminderButtons(state);
-  buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(state)}` }]);
 
   await ctx.reply(
     renderReminderMessage(state),
@@ -344,7 +303,6 @@ async function handleMultiTaskCreation(ctx: Context & { message: { text: string;
 
   const state: ReminderItem[] = createdTaskIds.map((id) => ({ kind: 'task', id, done: false }));
   const buttons = buildReminderButtons(state);
-  buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(state)}` }]);
 
   await ctx.reply(
     renderReminderMessage(state),
@@ -409,7 +367,6 @@ async function handleRoutineCreation(ctx: Context & { message: { text: string; c
 
   const state: ReminderItem[] = [{ kind: 'routine', id: routine.id, done: false }];
   const buttons = buildReminderButtons(state);
-  buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(state)}` }]);
 
   await ctx.reply(
     renderReminderMessage(state),

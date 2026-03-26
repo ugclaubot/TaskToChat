@@ -93,15 +93,29 @@ export function fallbackReminderStateFromMarkup(markup: any): ReminderItem[] {
   const items: ReminderItem[] = [];
   for (const row of markup.inline_keyboard) {
     for (const btn of row ?? []) {
-      const taskMatch = typeof btn?.callback_data === 'string' ? btn.callback_data.match(/^toggle_task_(\d+)$/) : null;
-      if (taskMatch) {
-        items.push({ kind: 'task', id: parseInt(taskMatch[1], 10), done: false });
+      const callback = typeof btn?.callback_data === 'string' ? btn.callback_data : '';
+
+      const toggleTaskMatch = callback.match(/^toggle_task_(\d+)$/);
+      if (toggleTaskMatch) {
+        items.push({ kind: 'task', id: parseInt(toggleTaskMatch[1], 10), done: false });
         continue;
       }
 
-      const routineMatch = typeof btn?.callback_data === 'string' ? btn.callback_data.match(/^toggle_routine_(\d+)$/) : null;
-      if (routineMatch) {
-        items.push({ kind: 'routine', id: parseInt(routineMatch[1], 10), done: false });
+      const undoTaskMatch = callback.match(/^undo_task_(\d+)$/);
+      if (undoTaskMatch) {
+        items.push({ kind: 'task', id: parseInt(undoTaskMatch[1], 10), done: true });
+        continue;
+      }
+
+      const toggleRoutineMatch = callback.match(/^toggle_routine_(\d+)$/);
+      if (toggleRoutineMatch) {
+        items.push({ kind: 'routine', id: parseInt(toggleRoutineMatch[1], 10), done: false });
+        continue;
+      }
+
+      const undoRoutineMatch = callback.match(/^undo_routine_(\d+)$/);
+      if (undoRoutineMatch) {
+        items.push({ kind: 'routine', id: parseInt(undoRoutineMatch[1], 10), done: true });
       }
     }
   }
