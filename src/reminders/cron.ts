@@ -6,7 +6,7 @@ import { getDueRoutinesForEmployee, getDueUnassignedRoutinesByGroup, RoutineWith
 import { sendWhatsAppSafe } from './whatsapp';
 import { morningEmployeeMessage, eveningEmployeeMessage, managerMorningSummary, groupMorningMessage, groupEveningMessage } from './templates';
 import { config } from '../config';
-import { buildReminderButtons, encodeReminderState, type ReminderItem } from '../bot/messageState';
+import { buildReminderButtons, type ReminderItem } from '../bot/messageState';
 
 function buildCombinedButtons(
   tasks: TaskWithEmployee[],
@@ -18,7 +18,6 @@ function buildCombinedButtons(
   ];
 
   const buttons = buildReminderButtons(state);
-  buttons.push([{ text: '·', callback_data: `state:${encodeReminderState(state)}` }]);
   return buttons;
 }
 
