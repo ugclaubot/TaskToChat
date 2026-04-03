@@ -229,12 +229,13 @@ async function handleTaskCreation(ctx: Context & { message: { text: string; chat
     ).catch(() => {});
   }
 
+  const senderName = ctx.from?.first_name ?? ctx.from?.username ?? 'Private';
   const task = createTask({
     title: parsed.title,
     assignedTo: employee?.id,
     assignedBy,
     groupChatId: String(chat.id),
-    groupChatName: chat.type !== 'private' ? (chat.title ?? undefined) : undefined,
+    groupChatName: chat.type !== 'private' ? (chat.title ?? undefined) : `DM - ${senderName}`,
     topicId,
     topicName,
     priority: parsed.priority,
@@ -286,12 +287,13 @@ async function handleMultiTaskCreation(ctx: Context & { message: { text: string;
       employee = findOrCreateEmployee(parsed.assigneeName);
     }
 
+    const senderName = ctx.from?.first_name ?? ctx.from?.username ?? 'Private';
     const task = createTask({
       title: parsed.title,
       assignedTo: employee?.id,
       assignedBy,
       groupChatId: String(chat.id),
-      groupChatName: chat.type !== 'private' ? (chat.title ?? undefined) : undefined,
+      groupChatName: chat.type !== 'private' ? (chat.title ?? undefined) : `DM - ${senderName}`,
       topicId,
       topicName,
       priority: parsed.priority,
@@ -350,12 +352,13 @@ async function handleRoutineCreation(ctx: Context & { message: { text: string; c
     parsed.recurrenceMonth
   );
 
+  const senderName = ctx.from?.first_name ?? ctx.from?.username ?? 'Private';
   const routine = createRoutine({
     title: parsed.title,
     assignedTo: employee?.id,
     assignedBy,
     groupChatId: String(chat.id),
-    groupChatName: chat.type !== 'private' ? (chat.title ?? undefined) : undefined,
+    groupChatName: chat.type !== 'private' ? (chat.title ?? undefined) : `DM - ${senderName}`,
     topicId,
     topicName,
     recurrenceType: parsed.recurrenceType,
